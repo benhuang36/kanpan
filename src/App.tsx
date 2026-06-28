@@ -11,6 +11,7 @@ import TableView from "./components/TableView";
 import Settings from "./components/Settings";
 import AlertsModal from "./components/AlertsModal";
 import AlertEngine from "./components/AlertEngine";
+import { AppLogo, BellIcon } from "./components/icons";
 import type { ViewMode } from "./store";
 
 function App() {
@@ -63,7 +64,10 @@ function App() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center gap-4 border-b border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-2">
-        <div className="text-sm font-semibold whitespace-nowrap">📈 KanPan 看盤</div>
+        <div className="flex items-center gap-2 whitespace-nowrap text-sm font-semibold">
+          <AppLogo size={22} />
+          KanPan 看盤
+        </div>
         <SearchBar />
         <div className="ml-auto flex items-center gap-2">
           <div className="flex rounded-md border border-[var(--color-border)] p-0.5 text-sm">
@@ -88,9 +92,10 @@ function App() {
           </div>
           <button
             onClick={() => setShowAlerts(true)}
-            className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-panel-2)]"
+            className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-panel-2)]"
           >
-            🔔 警示
+            <BellIcon size={14} />
+            警示
           </button>
           <button
             onClick={() => setShowSettings(true)}

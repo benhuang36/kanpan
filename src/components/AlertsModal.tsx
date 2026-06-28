@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore, type AlertKind } from "../store";
 import { ALERT_KIND_LABEL, ruleSummary } from "../alerts";
 import { ensureNotifyPermission } from "../notify";
+import { BellIcon } from "./icons";
 
 const KINDS: AlertKind[] = [
   "price_above",
@@ -38,7 +39,10 @@ export default function AlertsModal({ onClose }: { onClose: () => void }) {
         className="w-[560px] rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="mb-3 text-lg font-semibold">🔔 價格 / 指標警示</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+          <BellIcon size={18} />
+          價格 / 指標警示
+        </h2>
 
         {watchlist.length === 0 ? (
           <p className="text-sm text-[var(--color-muted)]">請先加入自選股，才能設定警示。</p>
