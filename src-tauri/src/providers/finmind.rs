@@ -51,17 +51,23 @@ impl FinMind {
             .get(BASE_URL)
             .query(&query)
             .send()
-            .await?
-            .error_for_status()?;
-        let body: Value = resp.json().await?;
+            .await
+            .map_err(|_| AppError::msg("無法連線到 FinMind，請檢查網路連線後再試"))?;
 
-        let status = body.get("status").and_then(|s| s.as_i64()).unwrap_or(0);
-        if status != 200 {
-            let msg = body
-                .get("msg")
-                .and_then(|m| m.as_str())
-                .unwrap_or("unknown FinMind error");
-            return Err(AppError::msg(format!("FinMind {status}: {msg}")));
+        let http_status = resp.status().as_u16();
+        // Parse the body even on non-2xx — FinMind returns a JSON message there.
+        let body: Value = resp
+            .json()
+            .await
+            .map_err(|_| AppError::msg("FinMind 回應格式異常，請稍後再試"))?;
+
+        let api_status = body
+            .get("status")
+            .and_then(|s| s.as_i64())
+            .unwrap_or(http_status as i64);
+        if api_status != 200 {
+            let raw = body.get("msg").and_then(|m| m.as_str()).unwrap_or("");
+            return Err(AppError::msg(friendly_finmind_error(api_status, raw)));
         }
 
         match body.get("data") {
@@ -211,6 +217,18 @@ impl FinMind {
             .collect();
         out.sort_by(|a, b| a.date.cmp(&b.date));
         Ok(out)
+    }
+}
+
+/// Map FinMind's status/message to a friendly, non-leaking Chinese message.
+fn friendly_finmind_error(status: i64, raw: &str) -> String {
+    let lower = raw.to_lowercase();
+    if lower.contains("token") || lower.contains("illegal") {
+        "FinMind token 無效，請到「設定」確認 FinMind token 是否正確（留空也可使用免費額度）".into()
+    } else if status == 402 || lower.contains("limit") || lower.contains("upper") {
+        "FinMind 已達免費請求上限，請稍後再試，或於「設定」填入 FinMind token 提高額度".into()
+    } else {
+        "FinMind 資料載入失敗，請稍後再試".into()
     }
 }
 

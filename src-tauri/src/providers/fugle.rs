@@ -114,12 +114,22 @@ impl FugleHttp {
             .header("X-API-KEY", key)
             .query(&[("timeframe", timeframe)])
             .send()
-            .await?;
+            .await
+            .map_err(|_| AppError::msg("無法連線到 Fugle，請檢查網路連線後再試"))?;
 
+        let status = resp.status().as_u16();
         if !resp.status().is_success() {
-            return Err(AppError::msg(format!("Fugle 分K 請求失敗: {}", resp.status())));
+            let msg = match status {
+                401 | 403 => "Fugle API key 無效或無權限，請到「設定」確認 Fugle API key",
+                429 => "Fugle 請求過於頻繁，請稍後再試",
+                _ => "Fugle 分K 載入失敗，請稍後再試",
+            };
+            return Err(AppError::msg(msg));
         }
-        let body: Value = resp.json().await?;
+        let body: Value = resp
+            .json()
+            .await
+            .map_err(|_| AppError::msg("Fugle 回應格式異常，請稍後再試"))?;
         let rows = match body.get("data").and_then(|d| d.as_array()) {
             Some(arr) => arr,
             None => return Ok(vec![]),
