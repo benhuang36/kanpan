@@ -12,17 +12,22 @@ export default function Settings({ onClose }: { onClose: () => void }) {
   const aiKey = useStore((s) => s.aiKey);
   const aiModel = useStore((s) => s.aiModel);
   const setAi = useStore((s) => s.setAi);
+  const pollMinutes = useStore((s) => s.pollMinutes);
+  const setPollMinutes = useStore((s) => s.setPollMinutes);
   const [value, setValue] = useState(token);
   const [fugle, setFugle] = useState(fugleKey);
   const [endpoint, setEndpoint] = useState(aiEndpoint);
   const [model, setModel] = useState(aiModel);
   const [aiK, setAiK] = useState(aiKey);
+  const [poll, setPoll] = useState(String(pollMinutes));
   const qc = useQueryClient();
 
   const save = async () => {
     setToken(value);
     setFugleKeyStore(fugle);
     setAi({ endpoint, key: aiK, model });
+    const p = Math.max(0, Math.floor(Number(poll) || 0));
+    setPollMinutes(p);
     await setFinmindToken(value || null);
     if (fugle) await setFugleKey(fugle);
     qc.invalidateQueries();
@@ -89,6 +94,22 @@ export default function Settings({ onClose }: { onClose: () => void }) {
           type="password"
           placeholder="貼上 AI API key…"
           className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-panel-2)] px-3 py-2 text-sm outline-none focus:border-blue-500"
+        />
+
+        <div className="my-4 border-t border-[var(--color-border)]" />
+
+        <label className="mb-1 block text-sm">自動更新間隔（分鐘）</label>
+        <p className="mb-2 text-xs text-[var(--color-muted)]">
+          每隔幾分鐘自動重抓自選股資料以更新均線/法人/RSI 並評估警示；即時報價(Fugle)不受此影響。設為
+          0 可關閉自動更新。程式縮到系統匣時仍會持續更新。
+        </p>
+        <input
+          value={poll}
+          onChange={(e) => setPoll(e.target.value)}
+          type="number"
+          min="0"
+          step="1"
+          className="w-28 rounded-md border border-[var(--color-border)] bg-[var(--color-panel-2)] px-3 py-2 text-sm outline-none focus:border-blue-500"
         />
 
         <div className="mt-4 flex justify-end gap-2">

@@ -35,6 +35,7 @@ interface AppState {
   aiEndpoint: string;
   aiKey: string;
   aiModel: string;
+  pollMinutes: number;
   alerts: AlertRule[];
 
   add: (s: SymbolInfo) => void;
@@ -44,6 +45,7 @@ interface AppState {
   setToken: (t: string) => void;
   setFugleKey: (k: string) => void;
   setAi: (cfg: { endpoint: string; key: string; model: string }) => void;
+  setPollMinutes: (n: number) => void;
   addAlert: (a: Omit<AlertRule, "id" | "enabled">) => void;
   removeAlert: (id: string) => void;
   toggleAlert: (id: string) => void;
@@ -60,6 +62,7 @@ export const useStore = create<AppState>()(
       aiEndpoint: "https://api.openai.com/v1",
       aiKey: "",
       aiModel: "gpt-4o-mini",
+      pollMinutes: 5,
       alerts: [],
 
       add: (s) => {
@@ -87,6 +90,7 @@ export const useStore = create<AppState>()(
       setFugleKey: (fugleKey) => set({ fugleKey }),
       setAi: ({ endpoint, key, model }) =>
         set({ aiEndpoint: endpoint, aiKey: key, aiModel: model }),
+      setPollMinutes: (pollMinutes) => set({ pollMinutes }),
 
       addAlert: (a) =>
         set((state) => ({
