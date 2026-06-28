@@ -1,0 +1,366 @@
+//! Fugle realtime market-data integration (Phase 3).
+//!
+//! A single WebSocket connection to
+//! `wss://api.fugle.tw/marketdata/v1.0/stock/streaming` is multiplexed across all
+//! subscribed symbols. We subscribe to the `trades` (成交) and `books` (最佳五檔)
+//! channels; per-symbol state is accumulated and a merged [`RealtimeQuote`] is
+//! emitted to the frontend as the `fugle://quote` event on every tick.
+
+use crate::error::{AppError, Result};
+use crate::models::IntradayCandle;
+use chrono::DateTime;
+use futures_util::{SinkExt, StreamExt};
+use serde::Serialize;
+use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::RwLock;
+use std::time::Duration;
+use tauri::{AppHandle, Emitter};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio_tungstenite::connect_async;
+use tokio_tungstenite::tungstenite::Message;
+
+const WS_URL: &str = "wss://api.fugle.tw/marketdata/v1.0/stock/streaming";
+const QUOTE_EVENT: &str = "fugle://quote";
+
+/// One price level of the best-5 order book.
+#[derive(Debug, Clone, Serialize)]
+pub struct BookLevel {
+    pub price: f64,
+    pub size: f64,
+}
+
+/// Merged realtime snapshot for one symbol, emitted to the frontend.
+#[derive(Debug, Clone, Serialize)]
+pub struct RealtimeQuote {
+    pub stock_id: String,
+    pub last_price: f64,
+    pub total_volume: f64,
+    /// Cumulative volume hitting the ask (外盤, buyer-initiated).
+    pub ask_volume: f64,
+    /// Cumulative volume hitting the bid (內盤, seller-initiated).
+    pub bid_volume: f64,
+    pub bids: Vec<BookLevel>,
+    pub asks: Vec<BookLevel>,
+    /// Epoch millis of the latest tick.
+    pub at: i64,
+}
+
+#[derive(Default)]
+struct SymState {
+    last_price: f64,
+    total_volume: f64,
+    bid_volume: f64,
+    ask_volume: f64,
+    bids: Vec<BookLevel>,
+    asks: Vec<BookLevel>,
+    at: i64,
+}
+
+impl SymState {
+    fn to_quote(&self, stock_id: &str) -> RealtimeQuote {
+        RealtimeQuote {
+            stock_id: stock_id.to_string(),
+            last_price: self.last_price,
+            total_volume: self.total_volume,
+            ask_volume: self.ask_volume,
+            bid_volume: self.bid_volume,
+            bids: self.bids.clone(),
+            asks: self.asks.clone(),
+            at: self.at,
+        }
+    }
+}
+
+const HTTP_BASE: &str = "https://api.fugle.tw/marketdata/v1.0/stock";
+
+/// HTTP client for Fugle REST endpoints (intraday candles, etc.). Shares the same
+/// API key as the realtime manager.
+pub struct FugleHttp {
+    client: reqwest::Client,
+    key: RwLock<Option<String>>,
+}
+
+impl FugleHttp {
+    pub fn new() -> Self {
+        FugleHttp {
+            client: reqwest::Client::new(),
+            key: RwLock::new(None),
+        }
+    }
+
+    pub fn set_key(&self, key: String) {
+        *self.key.write().unwrap() = if key.is_empty() { None } else { Some(key) };
+    }
+
+    /// Today's intraday candles at the given timeframe ("1".."60" minutes).
+    pub async fn intraday_candles(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+    ) -> Result<Vec<IntradayCandle>> {
+        let key = self
+            .key
+            .read()
+            .unwrap()
+            .clone()
+            .ok_or_else(|| AppError::msg("尚未設定 Fugle 金鑰"))?;
+
+        let url = format!("{HTTP_BASE}/intraday/candles/{symbol}");
+        let resp = self
+            .client
+            .get(&url)
+            .header("X-API-KEY", key)
+            .query(&[("timeframe", timeframe)])
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(AppError::msg(format!("Fugle 分K 請求失敗: {}", resp.status())));
+        }
+        let body: Value = resp.json().await?;
+        let rows = match body.get("data").and_then(|d| d.as_array()) {
+            Some(arr) => arr,
+            None => return Ok(vec![]),
+        };
+
+        let mut out: Vec<IntradayCandle> = rows
+            .iter()
+            .filter_map(|r| {
+                let ts = r.get("date").and_then(|d| d.as_str())?;
+                let time = DateTime::parse_from_rfc3339(ts).ok()?.timestamp();
+                Some(IntradayCandle {
+                    time,
+                    open: r.get("open").and_then(|x| x.as_f64()).unwrap_or(0.0),
+                    high: r.get("high").and_then(|x| x.as_f64()).unwrap_or(0.0),
+                    low: r.get("low").and_then(|x| x.as_f64()).unwrap_or(0.0),
+                    close: r.get("close").and_then(|x| x.as_f64()).unwrap_or(0.0),
+                    volume: r.get("volume").and_then(|x| x.as_f64()).unwrap_or(0.0),
+                })
+            })
+            .collect();
+        out.sort_by_key(|c| c.time);
+        Ok(out)
+    }
+}
+
+impl Default for FugleHttp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+enum Command {
+    SetKey(String),
+    Subscribe(String),
+    Unsubscribe(String),
+}
+
+/// Handle to the realtime connection task. Cheap to clone-free share via state.
+pub struct FugleManager {
+    tx: UnboundedSender<Command>,
+    has_key: AtomicBool,
+}
+
+impl FugleManager {
+    pub fn new(app: AppHandle) -> Self {
+        let (tx, rx) = unbounded_channel();
+        tauri::async_runtime::spawn(run(app, rx));
+        FugleManager {
+            tx,
+            has_key: AtomicBool::new(false),
+        }
+    }
+
+    pub fn set_key(&self, key: String) {
+        if key.is_empty() {
+            return;
+        }
+        self.has_key.store(true, Ordering::Relaxed);
+        let _ = self.tx.send(Command::SetKey(key));
+    }
+
+    pub fn has_key(&self) -> bool {
+        self.has_key.load(Ordering::Relaxed)
+    }
+
+    pub fn subscribe(&self, stock_id: String) {
+        let _ = self.tx.send(Command::Subscribe(stock_id));
+    }
+
+    pub fn unsubscribe(&self, stock_id: String) {
+        let _ = self.tx.send(Command::Unsubscribe(stock_id));
+    }
+}
+
+fn auth_msg(key: &str) -> Message {
+    Message::Text(json!({ "event": "auth", "data": { "apikey": key } }).to_string().into())
+}
+
+fn sub_msgs(symbol: &str) -> [Message; 2] {
+    let mk = |channel: &str| {
+        Message::Text(
+            json!({ "event": "subscribe", "data": { "channel": channel, "symbol": symbol } })
+                .to_string()
+                .into(),
+        )
+    };
+    [mk("trades"), mk("books")]
+}
+
+fn unsub_msgs(symbol: &str) -> [Message; 2] {
+    let mk = |channel: &str| {
+        Message::Text(
+            json!({ "event": "unsubscribe", "data": { "channel": channel, "symbol": symbol } })
+                .to_string()
+                .into(),
+        )
+    };
+    [mk("trades"), mk("books")]
+}
+
+fn levels(v: &Value, key: &str) -> Vec<BookLevel> {
+    v.get(key)
+        .and_then(|a| a.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|l| BookLevel {
+                    price: l.get("price").and_then(|x| x.as_f64()).unwrap_or(0.0),
+                    size: l.get("size").and_then(|x| x.as_f64()).unwrap_or(0.0),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The connection task. Owns the socket, the set of desired symbols and the
+/// per-symbol accumulators; reconnects with a fixed backoff.
+async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>) {
+    let mut key: Option<String> = None;
+    let mut desired: HashSet<String> = HashSet::new();
+    let mut state: HashMap<String, SymState> = HashMap::new();
+
+    loop {
+        // Without a key there is nothing to connect to: wait for commands.
+        if key.is_none() {
+            match rx.recv().await {
+                None => return,
+                Some(Command::SetKey(k)) => key = Some(k),
+                Some(Command::Subscribe(s)) => {
+                    desired.insert(s);
+                }
+                Some(Command::Unsubscribe(s)) => {
+                    desired.remove(&s);
+                    state.remove(&s);
+                }
+            }
+            continue;
+        }
+
+        let ws = match connect_async(WS_URL).await {
+            Ok((ws, _)) => ws,
+            Err(_) => {
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                continue;
+            }
+        };
+        let (mut write, mut read) = ws.split();
+        if write.send(auth_msg(key.as_ref().unwrap())).await.is_err() {
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            continue;
+        }
+        let mut authed = false;
+
+        // Inner loop: pump socket messages and control commands until the
+        // connection drops or the key changes (which forces a reconnect).
+        let reconnect = loop {
+            tokio::select! {
+                cmd = rx.recv() => match cmd {
+                    None => return,
+                    Some(Command::SetKey(k)) => { key = Some(k); break true; }
+                    Some(Command::Subscribe(s)) => {
+                        if desired.insert(s.clone()) && authed {
+                            for m in sub_msgs(&s) { let _ = write.send(m).await; }
+                        }
+                    }
+                    Some(Command::Unsubscribe(s)) => {
+                        desired.remove(&s);
+                        state.remove(&s);
+                        if authed {
+                            for m in unsub_msgs(&s) { let _ = write.send(m).await; }
+                        }
+                    }
+                },
+                msg = read.next() => match msg {
+                    None | Some(Err(_)) => break true,
+                    Some(Ok(Message::Ping(p))) => { let _ = write.send(Message::Pong(p)).await; }
+                    Some(Ok(Message::Text(txt))) => {
+                        let parsed: Value = match serde_json::from_str(txt.as_str()) {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
+                        let event = parsed.get("event").and_then(|e| e.as_str()).unwrap_or("");
+                        match event {
+                            "authenticated" => {
+                                authed = true;
+                                for s in desired.iter() {
+                                    for m in sub_msgs(s) { let _ = write.send(m).await; }
+                                }
+                            }
+                            "data" => {
+                                if let Some(quote) = apply_data(&parsed, &mut state) {
+                                    let _ = app.emit(QUOTE_EVENT, &quote);
+                                }
+                            }
+                            _ => {} // subscribed / heartbeat / error
+                        }
+                    }
+                    _ => {}
+                },
+            }
+        };
+
+        if reconnect {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+    }
+}
+
+/// Fold one `data` message into the per-symbol state and return the merged quote.
+fn apply_data(parsed: &Value, state: &mut HashMap<String, SymState>) -> Option<RealtimeQuote> {
+    let channel = parsed.get("channel").and_then(|c| c.as_str()).unwrap_or("");
+    let data = parsed.get("data")?;
+    let symbol = data.get("symbol").and_then(|s| s.as_str())?.to_string();
+    let st = state.entry(symbol.clone()).or_default();
+    let time_us = data.get("time").and_then(|t| t.as_i64()).unwrap_or(0);
+    st.at = time_us / 1000;
+
+    match channel {
+        "trades" => {
+            let price = data.get("price").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let size = data.get("size").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let bid = data.get("bid").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let ask = data.get("ask").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            if price > 0.0 {
+                st.last_price = price;
+            }
+            if let Some(vol) = data.get("volume").and_then(|x| x.as_f64()) {
+                st.total_volume = vol;
+            }
+            // Classify the trade as 外盤 (hit the ask) or 內盤 (hit the bid).
+            if ask > 0.0 && price >= ask {
+                st.ask_volume += size;
+            } else if bid > 0.0 && price <= bid {
+                st.bid_volume += size;
+            }
+        }
+        "books" => {
+            st.bids = levels(data, "bids");
+            st.asks = levels(data, "asks");
+        }
+        _ => return None,
+    }
+
+    Some(st.to_quote(&symbol))
+}
