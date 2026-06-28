@@ -28,6 +28,21 @@ function App() {
     startRealtimeListener();
   }, []);
 
+  // Keyboard: Cmd/Ctrl+, opens settings; Esc closes open modals.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setShowSettings(true);
+      } else if (e.key === "Escape") {
+        setShowSettings(false);
+        setShowAlerts(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // Push the persisted FinMind token to the backend on startup.
   useEffect(() => {
     if (token) setFinmindToken(token);

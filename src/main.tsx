@@ -4,6 +4,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import "./index.css";
 
+// Native-app feel: suppress the browser context menu everywhere except in
+// editable fields (so right-click paste still works in inputs).
+document.addEventListener("contextmenu", (e) => {
+  const el = e.target as HTMLElement | null;
+  if (!el?.closest('input, textarea, [contenteditable="true"]')) {
+    e.preventDefault();
+  }
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
