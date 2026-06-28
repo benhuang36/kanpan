@@ -1,3 +1,4 @@
+mod alerts;
 mod cache;
 mod commands;
 mod error;
@@ -5,11 +6,12 @@ mod indicators;
 mod models;
 mod providers;
 
+use alerts::AlertState;
 use commands::AppState;
 use providers::finmind::FinMind;
 use providers::fugle::{FugleHttp, FugleManager};
 use rusqlite::Connection;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -43,18 +45,32 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             let conn = Connection::open(data_dir.join("cache.sqlite"))?;
             cache::init(&conn)?;
+            let db = Arc::new(Mutex::new(conn));
 
             // FinMind token is optional; persisted in the frontend store and
             // pushed down via `set_finmind_token` after startup.
             let token = std::env::var("FINMIND_TOKEN").ok();
+            let finmind = Arc::new(FinMind::new(token));
 
             let fugle = FugleManager::new(app.handle().clone());
+            let alert_state = Arc::new(AlertState::new());
+
+            // Background alert engine: evaluates rules off the webview, so alerts
+            // keep firing while the window is hidden in the tray.
+            alerts::spawn_engine(
+                app.handle().clone(),
+                db.clone(),
+                finmind.clone(),
+                fugle.quotes(),
+                alert_state.clone(),
+            );
 
             app.manage(AppState {
-                db: Mutex::new(conn),
-                finmind: FinMind::new(token),
+                db,
+                finmind,
                 fugle,
                 fugle_http: FugleHttp::new(),
+                alerts: alert_state,
             });
 
             // System tray: left-click opens the main window; menu offers show / quit.
@@ -98,6 +114,8 @@ pub fn run() {
             commands::fugle_unsubscribe,
             commands::get_intraday_candles,
             commands::ai_chat,
+            commands::set_alerts,
+            commands::set_poll_minutes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

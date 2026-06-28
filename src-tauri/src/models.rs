@@ -10,6 +10,30 @@ pub struct SymbolInfo {
     pub market_type: String,
 }
 
+/// Condition type for a price/indicator alert. Serializes to snake_case to match
+/// the frontend (e.g. "price_above").
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AlertKind {
+    PriceAbove,
+    PriceBelow,
+    PctAbove,
+    PctBelow,
+    RsiAbove,
+    RsiBelow,
+}
+
+/// A user-defined alert rule, synced from the frontend to the backend engine.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertRule {
+    pub id: String,
+    pub stock_id: String,
+    pub stock_name: String,
+    pub kind: AlertKind,
+    pub value: f64,
+    pub enabled: bool,
+}
+
 /// One trading day OHLCV bar. `volume` is in shares.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Candle {

@@ -14,7 +14,10 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::RwLock;
+use std::sync::{Arc, Mutex, RwLock};
+
+/// Shared map of the latest realtime quote per symbol, readable by the alert engine.
+pub type QuoteMap = Arc<Mutex<HashMap<String, RealtimeQuote>>>;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -171,16 +174,24 @@ enum Command {
 pub struct FugleManager {
     tx: UnboundedSender<Command>,
     has_key: AtomicBool,
+    latest: QuoteMap,
 }
 
 impl FugleManager {
     pub fn new(app: AppHandle) -> Self {
         let (tx, rx) = unbounded_channel();
-        tauri::async_runtime::spawn(run(app, rx));
+        let latest: QuoteMap = Arc::new(Mutex::new(HashMap::new()));
+        tauri::async_runtime::spawn(run(app, rx, latest.clone()));
         FugleManager {
             tx,
             has_key: AtomicBool::new(false),
+            latest,
         }
+    }
+
+    /// Shared handle to the latest realtime quotes (for the alert engine).
+    pub fn quotes(&self) -> QuoteMap {
+        self.latest.clone()
     }
 
     pub fn set_key(&self, key: String) {
@@ -246,7 +257,7 @@ fn levels(v: &Value, key: &str) -> Vec<BookLevel> {
 
 /// The connection task. Owns the socket, the set of desired symbols and the
 /// per-symbol accumulators; reconnects with a fixed backoff.
-async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>) {
+async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMap) {
     let mut key: Option<String> = None;
     let mut desired: HashSet<String> = HashSet::new();
     let mut state: HashMap<String, SymState> = HashMap::new();
@@ -320,6 +331,9 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>) {
                             }
                             "data" => {
                                 if let Some(quote) = apply_data(&parsed, &mut state) {
+                                    if let Ok(mut map) = latest.lock() {
+                                        map.insert(quote.stock_id.clone(), quote.clone());
+                                    }
                                     let _ = app.emit(QUOTE_EVENT, &quote);
                                 }
                             }

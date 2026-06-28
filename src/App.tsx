@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./store";
-import { setFinmindToken, setFugleKey, fugleSubscribe } from "./api";
+import { setFinmindToken, setFugleKey, fugleSubscribe, pushAlerts, pushPollMinutes } from "./api";
 import { startRealtimeListener } from "./realtime";
 import SearchBar from "./components/SearchBar";
 import Watchlist from "./components/Watchlist";
@@ -10,7 +10,6 @@ import CompareView from "./components/CompareView";
 import TableView from "./components/TableView";
 import Settings from "./components/Settings";
 import AlertsModal from "./components/AlertsModal";
-import AlertEngine from "./components/AlertEngine";
 import { AppLogo, BellIcon } from "./components/icons";
 import type { ViewMode } from "./store";
 
@@ -21,6 +20,8 @@ function App() {
   const token = useStore((s) => s.finmindToken);
   const fugleKey = useStore((s) => s.fugleKey);
   const watchlist = useStore((s) => s.watchlist);
+  const alerts = useStore((s) => s.alerts);
+  const pollMinutes = useStore((s) => s.pollMinutes);
   const [showSettings, setShowSettings] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
 
@@ -60,6 +61,16 @@ function App() {
       fugleSubscribe(watchlist.map((w) => w.stock_id));
     }
   }, [fugleKey, watchlist]);
+
+  // Sync alert rules and poll interval to the backend engine (which runs the
+  // checks off the webview so they keep firing while hidden in the tray).
+  useEffect(() => {
+    pushAlerts(alerts);
+  }, [alerts]);
+
+  useEffect(() => {
+    pushPollMinutes(pollMinutes);
+  }, [pollMinutes]);
 
   return (
     <div className="flex h-screen flex-col">
@@ -129,7 +140,6 @@ function App() {
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
       {showAlerts && <AlertsModal onClose={() => setShowAlerts(false)} />}
-      <AlertEngine />
     </div>
   );
 }

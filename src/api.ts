@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { IntradayCandle, StockDetail, SymbolInfo } from "./types";
+import type { AlertRule } from "./store";
 
 export const searchSymbols = (query: string) =>
   invoke<SymbolInfo[]>("search_symbols", { query });
@@ -26,6 +27,12 @@ export const fugleUnsubscribe = (stockId: string) =>
 
 export const getIntradayCandles = (stockId: string, timeframe: string) =>
   invoke<IntradayCandle[]>("get_intraday_candles", { stockId, timeframe });
+
+export const pushAlerts = (alerts: AlertRule[]) =>
+  invoke<void>("set_alerts", { alerts });
+
+export const pushPollMinutes = (minutes: number) =>
+  invoke<void>("set_poll_minutes", { minutes });
 
 export const aiChat = (args: {
   endpoint: string;

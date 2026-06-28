@@ -2,20 +2,22 @@ use crate::cache;
 use crate::error::{AppError, Result};
 use crate::indicators::{build_indicators, build_ma, build_summary};
 use crate::models::{StockDetail, SymbolInfo};
-use crate::models::IntradayCandle;
+use crate::alerts::AlertState;
+use crate::models::{AlertRule, IntradayCandle};
 use crate::providers::finmind::FinMind;
 use crate::providers::fugle::{FugleHttp, FugleManager};
 use chrono::{Duration, Local};
 use rusqlite::Connection;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::State;
 
 /// Shared application state managed by Tauri.
 pub struct AppState {
-    pub db: Mutex<Connection>,
-    pub finmind: FinMind,
+    pub db: Arc<Mutex<Connection>>,
+    pub finmind: Arc<FinMind>,
     pub fugle: FugleManager,
     pub fugle_http: FugleHttp,
+    pub alerts: Arc<AlertState>,
 }
 
 const SYMBOLS_TTL_SECS: i64 = 7 * 24 * 3600;
@@ -321,4 +323,14 @@ pub fn fugle_subscribe(state: State<'_, AppState>, stock_ids: Vec<String>) {
 #[tauri::command]
 pub fn fugle_unsubscribe(state: State<'_, AppState>, stock_id: String) {
     state.fugle.unsubscribe(stock_id);
+}
+
+#[tauri::command]
+pub fn set_alerts(state: State<'_, AppState>, alerts: Vec<AlertRule>) {
+    state.alerts.set_rules(alerts);
+}
+
+#[tauri::command]
+pub fn set_poll_minutes(state: State<'_, AppState>, minutes: u64) {
+    state.alerts.set_poll_minutes(minutes);
 }
