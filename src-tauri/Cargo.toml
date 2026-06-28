@@ -1,6 +1,6 @@
 [package]
 name = "kanpan"
-version = "0.1.0"
+version = "0.2.0"
 description = "KanPan 看盤 — Taiwan stock dashboard"
 authors = ["you"]
 edition = "2021"
