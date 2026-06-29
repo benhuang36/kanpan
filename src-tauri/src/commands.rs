@@ -314,15 +314,8 @@ pub fn fugle_key_set(state: State<'_, AppState>) -> bool {
 }
 
 #[tauri::command]
-pub fn fugle_subscribe(state: State<'_, AppState>, stock_ids: Vec<String>) {
-    for id in stock_ids {
-        state.fugle.subscribe(id);
-    }
-}
-
-#[tauri::command]
-pub fn fugle_unsubscribe(state: State<'_, AppState>, stock_id: String) {
-    state.fugle.unsubscribe(stock_id);
+pub fn fugle_set_plan(state: State<'_, AppState>, focus: Option<String>, watch: Vec<String>) {
+    state.fugle.set_plan(focus, watch);
 }
 
 #[tauri::command]

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./store";
-import { setFinmindToken, setFugleKey, fugleSubscribe, pushAlerts, pushPollMinutes } from "./api";
+import { setFinmindToken, setFugleKey, fugleSetPlan, pushAlerts, pushPollMinutes } from "./api";
 import { startRealtimeListener } from "./realtime";
 import SearchBar from "./components/SearchBar";
 import Watchlist from "./components/Watchlist";
@@ -56,11 +56,13 @@ function App() {
     setFugleKey(fugleKey);
   }, [fugleKey]);
 
+  // Plan Fugle subscriptions within the free-tier 5-sub budget: the selected
+  // stock gets full data (price + 五檔), other watch-list stocks get price only.
   useEffect(() => {
-    if (fugleKey && watchlist.length) {
-      fugleSubscribe(watchlist.map((w) => w.stock_id));
+    if (fugleKey) {
+      fugleSetPlan(selected, watchlist.map((w) => w.stock_id));
     }
-  }, [fugleKey, watchlist]);
+  }, [fugleKey, watchlist, selected]);
 
   // Sync alert rules and poll interval to the backend engine (which runs the
   // checks off the webview so they keep firing while hidden in the tray).

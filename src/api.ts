@@ -19,11 +19,8 @@ export const setFugleKey = (key: string) => invoke<void>("set_fugle_key", { key 
 
 export const fugleKeySet = () => invoke<boolean>("fugle_key_set");
 
-export const fugleSubscribe = (stockIds: string[]) =>
-  invoke<void>("fugle_subscribe", { stockIds });
-
-export const fugleUnsubscribe = (stockId: string) =>
-  invoke<void>("fugle_unsubscribe", { stockId });
+export const fugleSetPlan = (focus: string | null, watch: string[]) =>
+  invoke<void>("fugle_set_plan", { focus, watch });
 
 export const getIntradayCandles = (stockId: string, timeframe: string) =>
   invoke<IntradayCandle[]>("get_intraday_candles", { stockId, timeframe });

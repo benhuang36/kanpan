@@ -164,10 +164,30 @@ impl Default for FugleHttp {
     }
 }
 
+/// A market-data channel. Each (symbol, channel) pair counts as one Fugle
+/// subscription (free tier allows only 5 total).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Channel {
+    Trades,
+    Books,
+}
+
+impl Channel {
+    fn name(self) -> &'static str {
+        match self {
+            Channel::Trades => "trades",
+            Channel::Books => "books",
+        }
+    }
+}
+
+/// Free-tier subscription cap (5 subscriptions on 1 connection).
+const MAX_SUBSCRIPTIONS: usize = 5;
+
 enum Command {
     SetKey(String),
-    Subscribe(String),
-    Unsubscribe(String),
+    /// The full desired set of (symbol, channel) subscriptions.
+    SetTargets(Vec<(String, Channel)>),
 }
 
 /// Handle to the realtime connection task. Cheap to clone-free share via state.
@@ -206,12 +226,25 @@ impl FugleManager {
         self.has_key.load(Ordering::Relaxed)
     }
 
-    pub fn subscribe(&self, stock_id: String) {
-        let _ = self.tx.send(Command::Subscribe(stock_id));
-    }
-
-    pub fn unsubscribe(&self, stock_id: String) {
-        let _ = self.tx.send(Command::Unsubscribe(stock_id));
+    /// Plan subscriptions within the free-tier 5-subscription budget:
+    /// the focused stock gets trades + books (price + best-5), and remaining
+    /// watch-list stocks get trades (price) only until the budget is used up.
+    pub fn set_plan(&self, focus: Option<String>, watch: Vec<String>) {
+        let mut targets: Vec<(String, Channel)> = Vec::new();
+        if let Some(f) = &focus {
+            targets.push((f.clone(), Channel::Trades));
+            targets.push((f.clone(), Channel::Books));
+        }
+        for id in watch {
+            if targets.len() >= MAX_SUBSCRIPTIONS {
+                break;
+            }
+            if Some(&id) == focus.as_ref() {
+                continue;
+            }
+            targets.push((id, Channel::Trades));
+        }
+        let _ = self.tx.send(Command::SetTargets(targets));
     }
 }
 
@@ -219,26 +252,20 @@ fn auth_msg(key: &str) -> Message {
     Message::Text(json!({ "event": "auth", "data": { "apikey": key } }).to_string().into())
 }
 
-fn sub_msgs(symbol: &str) -> [Message; 2] {
-    let mk = |channel: &str| {
-        Message::Text(
-            json!({ "event": "subscribe", "data": { "channel": channel, "symbol": symbol } })
-                .to_string()
-                .into(),
-        )
-    };
-    [mk("trades"), mk("books")]
+fn sub_msg(symbol: &str, channel: Channel) -> Message {
+    Message::Text(
+        json!({ "event": "subscribe", "data": { "channel": channel.name(), "symbol": symbol } })
+            .to_string()
+            .into(),
+    )
 }
 
-fn unsub_msgs(symbol: &str) -> [Message; 2] {
-    let mk = |channel: &str| {
-        Message::Text(
-            json!({ "event": "unsubscribe", "data": { "channel": channel, "symbol": symbol } })
-                .to_string()
-                .into(),
-        )
-    };
-    [mk("trades"), mk("books")]
+fn unsub_msg(symbol: &str, channel: Channel) -> Message {
+    Message::Text(
+        json!({ "event": "unsubscribe", "data": { "channel": channel.name(), "symbol": symbol } })
+            .to_string()
+            .into(),
+    )
 }
 
 fn levels(v: &Value, key: &str) -> Vec<BookLevel> {
@@ -259,7 +286,7 @@ fn levels(v: &Value, key: &str) -> Vec<BookLevel> {
 /// per-symbol accumulators; reconnects with a fixed backoff.
 async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMap) {
     let mut key: Option<String> = None;
-    let mut desired: HashSet<String> = HashSet::new();
+    let mut targets: HashSet<(String, Channel)> = HashSet::new();
     let mut state: HashMap<String, SymState> = HashMap::new();
 
     loop {
@@ -268,12 +295,8 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
             match rx.recv().await {
                 None => return,
                 Some(Command::SetKey(k)) => key = Some(k),
-                Some(Command::Subscribe(s)) => {
-                    desired.insert(s);
-                }
-                Some(Command::Unsubscribe(s)) => {
-                    desired.remove(&s);
-                    state.remove(&s);
+                Some(Command::SetTargets(t)) => {
+                    targets = t.into_iter().collect();
                 }
             }
             continue;
@@ -300,17 +323,17 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
                 cmd = rx.recv() => match cmd {
                     None => return,
                     Some(Command::SetKey(k)) => { key = Some(k); break true; }
-                    Some(Command::Subscribe(s)) => {
-                        if desired.insert(s.clone()) && authed {
-                            for m in sub_msgs(&s) { let _ = write.send(m).await; }
-                        }
-                    }
-                    Some(Command::Unsubscribe(s)) => {
-                        desired.remove(&s);
-                        state.remove(&s);
+                    Some(Command::SetTargets(t)) => {
+                        let new_set: HashSet<(String, Channel)> = t.into_iter().collect();
                         if authed {
-                            for m in unsub_msgs(&s) { let _ = write.send(m).await; }
+                            for (sym, ch) in targets.difference(&new_set) {
+                                let _ = write.send(unsub_msg(sym, *ch)).await;
+                            }
+                            for (sym, ch) in new_set.difference(&targets) {
+                                let _ = write.send(sub_msg(sym, *ch)).await;
+                            }
                         }
+                        targets = new_set;
                     }
                 },
                 msg = read.next() => match msg {
@@ -325,8 +348,8 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
                         match event {
                             "authenticated" => {
                                 authed = true;
-                                for s in desired.iter() {
-                                    for m in sub_msgs(s) { let _ = write.send(m).await; }
+                                for (sym, ch) in targets.iter() {
+                                    let _ = write.send(sub_msg(sym, *ch)).await;
                                 }
                             }
                             "data" => {
