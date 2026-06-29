@@ -103,7 +103,7 @@ export default function TableView() {
               <th
                 key={c.key}
                 onClick={() => onSort(c.key)}
-                className="cursor-pointer select-none px-3 py-2 text-right hover:text-white"
+                className="cursor-pointer select-none px-3 py-2 text-right hover:text-[var(--color-text)]"
               >
                 {c.label}
                 {arrow(c.key)}

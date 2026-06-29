@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { checkForUpdate, RELEASES_URL } from "../update";
+import { useStore } from "../store";
 
 export default function UpdateBanner() {
   const [latest, setLatest] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const autoCheckUpdate = useStore((s) => s.autoCheckUpdate);
 
   useEffect(() => {
+    if (!autoCheckUpdate) return;
     checkForUpdate().then((v) => {
       if (v) setLatest(v);
     });
-  }, []);
+  }, [autoCheckUpdate]);
 
   if (!latest || dismissed) return null;
 
@@ -28,7 +31,7 @@ export default function UpdateBanner() {
         </button>
         <button
           onClick={() => setDismissed(true)}
-          className="text-[var(--color-muted)] hover:text-white"
+          className="text-[var(--color-muted)] hover:text-[var(--color-text)]"
           title="關閉"
         >
           ✕

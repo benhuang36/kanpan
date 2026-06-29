@@ -11,12 +11,14 @@ use commands::AppState;
 use providers::finmind::FinMind;
 use providers::fugle::{FugleHttp, FugleManager};
 use rusqlite::Connection;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, WindowEvent,
 };
+use tauri_plugin_autostart::MacosLauncher;
 
 /// Bring the main window back to the foreground (from tray / minimised / hidden).
 fn show_main_window(app: &AppHandle) {
@@ -33,11 +35,15 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
-        // Closing the window hides it to the tray instead of quitting.
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        // Closing the window hides it to the tray, unless the user chose to quit.
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
-                api.prevent_close();
+                let to_tray = window.state::<AppState>().close_to_tray.load(Ordering::Relaxed);
+                if to_tray {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
             }
         })
         .setup(|app| {
@@ -71,6 +77,7 @@ pub fn run() {
                 fugle,
                 fugle_http: FugleHttp::new(),
                 alerts: alert_state,
+                close_to_tray: AtomicBool::new(true),
             });
 
             // System tray: left-click opens the main window; menu offers show / quit.
@@ -115,6 +122,10 @@ pub fn run() {
             commands::ai_chat,
             commands::set_alerts,
             commands::set_poll_minutes,
+            commands::set_close_to_tray,
+            commands::test_finmind,
+            commands::test_fugle,
+            commands::test_ai,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

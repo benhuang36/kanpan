@@ -8,6 +8,8 @@ import {
 } from "lightweight-charts";
 import type { IntradayCandle } from "../types";
 import { changeColor, fmtPct, fmtPrice, fmtSigned, fmtLotsVolume } from "../format";
+import { useStore } from "../store";
+import { chartColors, withAlpha } from "../theme";
 
 // Taipei is UTC+8; lightweight-charts renders UTC timestamps, so we shift the
 // epoch by 8h to make the axis read as local wall-clock time.
@@ -37,22 +39,25 @@ export default function IntradayChart({ candles }: { candles: IntradayCandle[] }
   const chartRef = useRef<IChartApi | null>(null);
   const [legend, setLegend] = useState<Legend | null>(null);
   const [side, setSide] = useState<"left" | "right">("left");
+  const theme = useStore((s) => s.theme);
+  const colorUp = useStore((s) => s.colorUp);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    const col = chartColors(theme, colorUp);
 
     const chart = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#8b93a7",
+        textColor: col.text,
         fontFamily: "inherit",
       },
-      grid: { vertLines: { color: "#1b2130" }, horzLines: { color: "#1b2130" } },
+      grid: { vertLines: { color: col.grid }, horzLines: { color: col.grid } },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: "#232a3a" },
+      rightPriceScale: { borderColor: col.border },
       timeScale: {
-        borderColor: "#232a3a",
+        borderColor: col.border,
         timeVisible: true,
         secondsVisible: false,
         // Cap zoom-out so the data can't shrink below the full chart width.
@@ -64,12 +69,12 @@ export default function IntradayChart({ candles }: { candles: IntradayCandle[] }
     chartRef.current = chart;
 
     const candleSeries = chart.addCandlestickSeries({
-      upColor: "#e23b3b",
-      downColor: "#1eb854",
-      borderUpColor: "#e23b3b",
-      borderDownColor: "#1eb854",
-      wickUpColor: "#e23b3b",
-      wickDownColor: "#1eb854",
+      upColor: col.up,
+      downColor: col.down,
+      borderUpColor: col.up,
+      borderDownColor: col.down,
+      wickUpColor: col.up,
+      wickDownColor: col.down,
     });
     candleSeries.setData(
       candles.map((c) => ({
@@ -90,7 +95,7 @@ export default function IntradayChart({ candles }: { candles: IntradayCandle[] }
       candles.map((c) => ({
         time: (c.time + TPE_OFFSET) as UTCTimestamp,
         value: c.volume,
-        color: c.close >= c.open ? "rgba(226,59,59,0.4)" : "rgba(30,184,84,0.4)",
+        color: c.close >= c.open ? withAlpha(col.up, 0.4) : withAlpha(col.down, 0.4),
       })),
     );
 
@@ -128,7 +133,7 @@ export default function IntradayChart({ candles }: { candles: IntradayCandle[] }
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles]);
+  }, [candles, theme, colorUp]);
 
   return (
     <div className="relative h-full w-full">

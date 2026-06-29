@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./store";
-import { setFinmindToken, setFugleKey, fugleSetPlan, pushAlerts, pushPollMinutes } from "./api";
+import {
+  setFinmindToken,
+  setFugleKey,
+  fugleSetPlan,
+  pushAlerts,
+  pushPollMinutes,
+  setCloseToTray,
+} from "./api";
 import { startRealtimeListener } from "./realtime";
+import { applyTheme } from "./theme";
 import SearchBar from "./components/SearchBar";
 import Watchlist from "./components/Watchlist";
 import StockDetail from "./components/StockDetail";
@@ -23,13 +31,34 @@ function App() {
   const watchlist = useStore((s) => s.watchlist);
   const alerts = useStore((s) => s.alerts);
   const pollMinutes = useStore((s) => s.pollMinutes);
+  const theme = useStore((s) => s.theme);
+  const colorUp = useStore((s) => s.colorUp);
+  const closeBehavior = useStore((s) => s.closeBehavior);
   const [showSettings, setShowSettings] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
 
-  // Start listening for realtime quote events once.
+  // Start listening for realtime quote events once; open the default view.
   useEffect(() => {
     startRealtimeListener();
+    setView(useStore.getState().defaultView);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Apply theme + colour convention; re-apply on OS theme change when 'system'.
+  useEffect(() => {
+    applyTheme(theme, colorUp);
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      if (useStore.getState().theme === "system") applyTheme("system", useStore.getState().colorUp);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [theme, colorUp]);
+
+  // Push close behaviour to the backend (tray vs quit).
+  useEffect(() => {
+    setCloseToTray(closeBehavior === "tray");
+  }, [closeBehavior]);
 
   // Keyboard: Cmd/Ctrl+, opens settings; Esc closes open modals.
   useEffect(() => {

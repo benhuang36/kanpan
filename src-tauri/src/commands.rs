@@ -8,6 +8,7 @@ use crate::providers::finmind::FinMind;
 use crate::providers::fugle::{FugleHttp, FugleManager};
 use chrono::{Duration, Local};
 use rusqlite::Connection;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
@@ -18,6 +19,8 @@ pub struct AppState {
     pub fugle: FugleManager,
     pub fugle_http: FugleHttp,
     pub alerts: Arc<AlertState>,
+    /// When true (default), closing the window hides to tray instead of quitting.
+    pub close_to_tray: AtomicBool,
 }
 
 const SYMBOLS_TTL_SECS: i64 = 7 * 24 * 3600;
@@ -301,6 +304,7 @@ pub async fn ai_chat(
     model: String,
     system: String,
     user: String,
+    temperature: f64,
 ) -> Result<String> {
     let base = endpoint.trim().trim_end_matches('/');
     if base.is_empty() || api_key.is_empty() {
@@ -313,7 +317,7 @@ pub async fn ai_chat(
             { "role": "system", "content": system },
             { "role": "user", "content": user },
         ],
-        "temperature": 0.4,
+        "temperature": temperature,
         "stream": false,
     });
 
@@ -358,4 +362,36 @@ pub fn set_alerts(state: State<'_, AppState>, alerts: Vec<AlertRule>) {
 #[tauri::command]
 pub fn set_poll_minutes(state: State<'_, AppState>, minutes: u64) {
     state.alerts.set_poll_minutes(minutes);
+}
+
+#[tauri::command]
+pub fn set_close_to_tray(state: State<'_, AppState>, enabled: bool) {
+    state.close_to_tray.store(enabled, Ordering::Relaxed);
+}
+
+// ---- connection tests (settings panel) ----
+
+#[tauri::command]
+pub async fn test_finmind(token: String) -> Result<String> {
+    let fm = FinMind::new(if token.is_empty() { None } else { Some(token) });
+    let start = (Local::now().date_naive() - Duration::days(7))
+        .format("%Y-%m-%d")
+        .to_string();
+    fm.daily_price("2330", &start).await.map(|_| "連線成功".to_string())
+}
+
+#[tauri::command]
+pub async fn test_fugle(key: String) -> Result<String> {
+    let http = FugleHttp::new();
+    http.set_key(key);
+    http.intraday_candles("2330", "1")
+        .await
+        .map(|_| "連線成功".to_string())
+}
+
+#[tauri::command]
+pub async fn test_ai(endpoint: String, api_key: String, model: String) -> Result<String> {
+    ai_chat(endpoint, api_key, model, "You are a connection test.".into(), "ping".into(), 0.0)
+        .await
+        .map(|_| "連線成功".to_string())
 }

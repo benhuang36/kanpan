@@ -7,6 +7,8 @@ import {
 } from "lightweight-charts";
 import type { Candle, MaSeries } from "../types";
 import { changeColor, fmtPct, fmtPrice, fmtSigned, fmtVolumeLots } from "../format";
+import { useStore } from "../store";
+import { chartColors, withAlpha } from "../theme";
 
 const MA_COLORS: Record<number, string> = {
   5: "#f5d142",
@@ -40,25 +42,30 @@ export default function PriceChart({
   const [legend, setLegend] = useState<Legend | null>(null);
   // Flip the legend to the opposite side when the cursor is over it.
   const [side, setSide] = useState<"left" | "right">("left");
+  const theme = useStore((s) => s.theme);
+  const colorUp = useStore((s) => s.colorUp);
+  const maVisible = useStore((s) => s.maVisible);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    const col = chartColors(theme, colorUp);
+    const visibleMa = ma.filter((m) => maVisible.includes(m.period));
 
     const chart = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#8b93a7",
+        textColor: col.text,
         fontFamily: "inherit",
       },
       grid: {
-        vertLines: { color: "#1b2130" },
-        horzLines: { color: "#1b2130" },
+        vertLines: { color: col.grid },
+        horzLines: { color: col.grid },
       },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: "#232a3a" },
+      rightPriceScale: { borderColor: col.border },
       timeScale: {
-        borderColor: "#232a3a",
+        borderColor: col.border,
         rightOffset: 4,
         // Cap zoom-out so the data can't shrink below the full chart width.
         fixLeftEdge: true,
@@ -68,14 +75,13 @@ export default function PriceChart({
     });
     chartRef.current = chart;
 
-    // 漲紅跌綠 (Taiwan convention)
     const candleSeries = chart.addCandlestickSeries({
-      upColor: "#e23b3b",
-      downColor: "#1eb854",
-      borderUpColor: "#e23b3b",
-      borderDownColor: "#1eb854",
-      wickUpColor: "#e23b3b",
-      wickDownColor: "#1eb854",
+      upColor: col.up,
+      downColor: col.down,
+      borderUpColor: col.up,
+      borderDownColor: col.down,
+      wickUpColor: col.up,
+      wickDownColor: col.down,
     });
     candleSeries.setData(
       candles.map((c) => ({
@@ -90,7 +96,7 @@ export default function PriceChart({
     const volumeSeries = chart.addHistogramSeries({
       priceScaleId: "vol",
       priceFormat: { type: "volume" },
-      color: "#2a3142",
+      color: col.grid,
     });
     volumeSeries.priceScale().applyOptions({
       scaleMargins: { top: 0.82, bottom: 0 },
@@ -99,11 +105,11 @@ export default function PriceChart({
       candles.map((c) => ({
         time: c.date,
         value: c.volume,
-        color: c.close >= c.open ? "rgba(226,59,59,0.4)" : "rgba(30,184,84,0.4)",
+        color: c.close >= c.open ? withAlpha(col.up, 0.4) : withAlpha(col.down, 0.4),
       })),
     );
 
-    for (const series of ma) {
+    for (const series of visibleMa) {
       const line = chart.addLineSeries({
         color: MA_COLORS[series.period] ?? "#888",
         lineWidth: 1,
@@ -133,7 +139,7 @@ export default function PriceChart({
         change: c.close - prevClose,
         changePct: prevClose ? ((c.close - prevClose) / prevClose) * 100 : 0,
         volume: c.volume,
-        mas: ma.map((m) => ({ period: m.period, value: m.values[i] ?? null })),
+        mas: visibleMa.map((m) => ({ period: m.period, value: m.values[i] ?? null })),
       };
     };
 
@@ -155,7 +161,7 @@ export default function PriceChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, ma]);
+  }, [candles, ma, theme, colorUp, maVisible]);
 
   return (
     <div className="relative h-full w-full">

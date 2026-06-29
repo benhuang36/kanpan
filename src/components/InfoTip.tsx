@@ -39,7 +39,7 @@ export default function InfoTip({ term, text }: { term?: string; text?: string }
         createPortal(
           <div
             style={{ position: "fixed", top: pos.top, left: pos.left, width: 260 }}
-            className="z-50 rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] p-2.5 text-[11px] leading-relaxed text-[#e6e8ef] shadow-xl"
+            className="z-50 rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] p-2.5 text-[11px] leading-relaxed text-[var(--color-text)] shadow-xl"
           >
             {body}
           </div>,

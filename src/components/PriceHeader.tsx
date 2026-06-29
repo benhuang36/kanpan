@@ -1,5 +1,6 @@
 import type { PriceSummary, RealtimeQuote } from "../types";
 import { changeColor, fmtPct, fmtPrice, fmtSigned, fmtVolumeLots, fmtLotsVolume } from "../format";
+import { useStore } from "../store";
 import InfoTip from "./InfoTip";
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -27,6 +28,7 @@ function MaTag({ label, value, price }: { label: string; value: number | null; p
 }
 
 export default function PriceHeader({ s, rt }: { s: PriceSummary; rt?: RealtimeQuote }) {
+  const maVisible = useStore((st) => st.maVisible);
   const live = rt && rt.last_price > 0;
   const price = live ? rt!.last_price : s.close;
   const change = live ? rt!.last_price - s.ref_close : s.change;
@@ -103,11 +105,19 @@ export default function PriceHeader({ s, rt }: { s: PriceSummary; rt?: RealtimeQ
         <InfoTip term="ma" />
         <InfoTip term="bias" />
       </div>
-      <div className="mt-1 grid grid-cols-4 gap-2 sm:max-w-md">
-        <MaTag label="MA5" value={s.ma5} price={price} />
-        <MaTag label="MA20 (月)" value={s.ma20} price={price} />
-        <MaTag label="MA60 (季)" value={s.ma60} price={price} />
-        <MaTag label="MA200 (年)" value={s.ma200} price={price} />
+      <div className="mt-1 flex flex-wrap gap-2 sm:max-w-md">
+        {[
+          { p: 5, label: "MA5", v: s.ma5 },
+          { p: 20, label: "MA20 (月)", v: s.ma20 },
+          { p: 60, label: "MA60 (季)", v: s.ma60 },
+          { p: 200, label: "MA200 (年)", v: s.ma200 },
+        ]
+          .filter((m) => maVisible.includes(m.p))
+          .map((m) => (
+            <div key={m.p} className="min-w-[88px] flex-1">
+              <MaTag label={m.label} value={m.v} price={price} />
+            </div>
+          ))}
       </div>
     </div>
   );

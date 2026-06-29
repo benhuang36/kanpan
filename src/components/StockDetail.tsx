@@ -55,8 +55,8 @@ export default function StockDetail({ stockId }: { stockId: string }) {
               onClick={() => setTab(t.id)}
               className={`rounded-t px-3 py-1 text-xs ${
                 tab === t.id
-                  ? "bg-[var(--color-panel-2)] text-white"
-                  : "text-[var(--color-muted)] hover:text-white"
+                  ? "bg-[var(--color-panel-2)] text-[var(--color-text)]"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-text)]"
               }`}
             >
               {t.label}

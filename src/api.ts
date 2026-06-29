@@ -31,10 +31,23 @@ export const pushAlerts = (alerts: AlertRule[]) =>
 export const pushPollMinutes = (minutes: number) =>
   invoke<void>("set_poll_minutes", { minutes });
 
+export const setCloseToTray = (enabled: boolean) =>
+  invoke<void>("set_close_to_tray", { enabled });
+
 export const aiChat = (args: {
   endpoint: string;
   apiKey: string;
   model: string;
   system: string;
   user: string;
+  temperature: number;
 }) => invoke<string>("ai_chat", args);
+
+// Connection tests (settings) — resolve with a success message, reject on error.
+export const testFinmind = (token: string) =>
+  invoke<string>("test_finmind", { token });
+
+export const testFugle = (key: string) => invoke<string>("test_fugle", { key });
+
+export const testAi = (endpoint: string, apiKey: string, model: string) =>
+  invoke<string>("test_ai", { endpoint, apiKey, model });

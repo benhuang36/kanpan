@@ -3,6 +3,10 @@ import { persist } from "zustand/middleware";
 import type { SymbolInfo } from "./types";
 
 export type ViewMode = "focus" | "grid" | "compare" | "table";
+export type Timeframe = "D" | "1" | "5" | "15" | "60";
+export type Theme = "system" | "light" | "dark";
+export type ColorUp = "red" | "green";
+export type CloseBehavior = "tray" | "quit";
 
 export interface WatchItem {
   stock_id: string;
@@ -38,6 +42,17 @@ interface AppState {
   pollMinutes: number;
   alerts: AlertRule[];
 
+  // Preferences (settings panel)
+  theme: Theme;
+  colorUp: ColorUp;
+  closeBehavior: CloseBehavior;
+  defaultView: ViewMode;
+  defaultTimeframe: Timeframe;
+  maVisible: number[];
+  autoCheckUpdate: boolean;
+  aiTemperature: number;
+  aiTone: string;
+
   add: (s: SymbolInfo) => void;
   remove: (stockId: string) => void;
   reorder: (from: number, to: number) => void;
@@ -50,6 +65,19 @@ interface AppState {
   addAlert: (a: Omit<AlertRule, "id" | "enabled">) => void;
   removeAlert: (id: string) => void;
   toggleAlert: (id: string) => void;
+  setPrefs: (p: Partial<Prefs>) => void;
+}
+
+interface Prefs {
+  theme: Theme;
+  colorUp: ColorUp;
+  closeBehavior: CloseBehavior;
+  defaultView: ViewMode;
+  defaultTimeframe: Timeframe;
+  maVisible: number[];
+  autoCheckUpdate: boolean;
+  aiTemperature: number;
+  aiTone: string;
 }
 
 export const useStore = create<AppState>()(
@@ -65,6 +93,16 @@ export const useStore = create<AppState>()(
       aiModel: "gpt-4o-mini",
       pollMinutes: 5,
       alerts: [],
+
+      theme: "system",
+      colorUp: "red",
+      closeBehavior: "tray",
+      defaultView: "focus",
+      defaultTimeframe: "D",
+      maVisible: [5, 20, 60, 200],
+      autoCheckUpdate: true,
+      aiTemperature: 0.4,
+      aiTone: "中性",
 
       add: (s) => {
         if (get().watchlist.some((w) => w.stock_id === s.stock_id)) {
@@ -102,6 +140,7 @@ export const useStore = create<AppState>()(
       setAi: ({ endpoint, key, model }) =>
         set({ aiEndpoint: endpoint, aiKey: key, aiModel: model }),
       setPollMinutes: (pollMinutes) => set({ pollMinutes }),
+      setPrefs: (p) => set(p),
 
       addAlert: (a) =>
         set((state) => ({

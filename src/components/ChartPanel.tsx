@@ -25,7 +25,7 @@ export default function ChartPanel({
   candles: Candle[];
   ma: MaSeries[];
 }) {
-  const [tf, setTf] = useState<TF>("D");
+  const [tf, setTf] = useState<TF>(useStore.getState().defaultTimeframe);
   const fugleKey = useStore((s) => s.fugleKey);
   const intraday = tf !== "D";
 

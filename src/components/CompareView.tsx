@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, type IChartApi } from "lightweight-charts";
 import { useStore } from "../store";
 import { useWatchlistDetails } from "../hooks";
+import { chartColors } from "../theme";
 
 const PALETTE = [
   "#4ea1ff", "#e23b3b", "#1eb854", "#f5d142", "#c061ff",
@@ -20,19 +21,22 @@ export default function CompareView() {
   const results = useWatchlistDetails(watchlist);
   const [days, setDays] = useState(60);
   const chartRef = useRef<HTMLDivElement>(null);
+  const theme = useStore((s) => s.theme);
+  const colorUp = useStore((s) => s.colorUp);
 
   useEffect(() => {
     if (!chartRef.current) return;
+    const col = chartColors(theme, colorUp);
     const chart: IChartApi = createChart(chartRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#8b93a7",
+        textColor: col.text,
         fontFamily: "inherit",
       },
-      grid: { vertLines: { color: "#1b2130" }, horzLines: { color: "#1b2130" } },
-      rightPriceScale: { borderColor: "#232a3a" },
+      grid: { vertLines: { color: col.grid }, horzLines: { color: col.grid } },
+      rightPriceScale: { borderColor: col.border },
       timeScale: {
-        borderColor: "#232a3a",
+        borderColor: col.border,
         // Cap zoom-out so the data can't shrink below the full chart width.
         fixLeftEdge: true,
         fixRightEdge: true,
@@ -58,7 +62,7 @@ export default function CompareView() {
     });
     chart.timeScale().fitContent();
     return () => chart.remove();
-  }, [results, days]);
+  }, [results, days, theme, colorUp]);
 
   if (watchlist.length === 0) {
     return (

@@ -3,7 +3,15 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import App from "./App";
+import { useStore } from "./store";
+import { applyTheme } from "./theme";
 import "./index.css";
+
+// Apply persisted theme + colour convention before first paint (avoids flash).
+{
+  const s = useStore.getState();
+  applyTheme(s.theme, s.colorUp);
+}
 
 // Native-app feel: suppress the browser context menu everywhere except in
 // editable fields (so right-click paste still works in inputs).

@@ -3,7 +3,7 @@ import remarkGfm from "remark-gfm";
 import { useStore } from "../store";
 import { useAiStore } from "../aiStore";
 import { aiChat } from "../api";
-import { AI_SYSTEM_PROMPT, buildAnalysisPrompt } from "../ai";
+import { AI_SYSTEM_PROMPT, buildAnalysisPrompt, toneInstruction } from "../ai";
 import type { RealtimeQuote, StockDetail } from "../types";
 
 export default function AiAnalysisPanel({
@@ -16,6 +16,8 @@ export default function AiAnalysisPanel({
   const aiEndpoint = useStore((s) => s.aiEndpoint);
   const aiKey = useStore((s) => s.aiKey);
   const aiModel = useStore((s) => s.aiModel);
+  const aiTemperature = useStore((s) => s.aiTemperature);
+  const aiTone = useStore((s) => s.aiTone);
 
   const stockId = detail.summary.stock_id;
   const { text: result, loading, error } = useAiStore((s) => s.results[stockId]) ?? {
@@ -34,8 +36,9 @@ export default function AiAnalysisPanel({
         endpoint: aiEndpoint,
         apiKey: aiKey,
         model: aiModel,
-        system: AI_SYSTEM_PROMPT,
+        system: `${AI_SYSTEM_PROMPT}\n${toneInstruction(aiTone)}`,
         user: buildAnalysisPrompt(detail, rt),
+        temperature: aiTemperature,
       });
       patch(stockId, { text, loading: false });
     } catch (e) {
