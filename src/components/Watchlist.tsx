@@ -1,4 +1,5 @@
 import { useStockDetail } from "../hooks";
+import { useQuote } from "../realtime";
 import { useStore, type WatchItem } from "../store";
 import { changeColor, fmtPct, fmtPrice } from "../format";
 
@@ -7,7 +8,15 @@ function Row({ item }: { item: WatchItem }) {
   const select = useStore((s) => s.select);
   const remove = useStore((s) => s.remove);
   const { data } = useStockDetail(item.stock_id);
+  const rt = useQuote(item.stock_id);
   const sum = data?.summary;
+
+  const live = rt && rt.last_price > 0;
+  const price = live ? rt!.last_price : sum?.close;
+  const changePct =
+    live && sum?.ref_close
+      ? ((rt!.last_price - sum.ref_close) / sum.ref_close) * 100
+      : sum?.change_pct;
 
   const active = selected === item.stock_id;
 
@@ -26,11 +35,11 @@ function Row({ item }: { item: WatchItem }) {
       </div>
       <div className="flex items-center gap-2">
         <div className="text-right">
-          <div className={`text-sm tabular-nums ${changeColor(sum?.change_pct)}`}>
-            {sum ? fmtPrice(sum.close) : "—"}
+          <div className={`text-sm tabular-nums ${changeColor(changePct)}`}>
+            {price != null ? fmtPrice(price) : "—"}
           </div>
-          <div className={`text-xs tabular-nums ${changeColor(sum?.change_pct)}`}>
-            {sum ? fmtPct(sum.change_pct) : ""}
+          <div className={`text-xs tabular-nums ${changeColor(changePct)}`}>
+            {changePct != null ? fmtPct(changePct) : ""}
           </div>
         </div>
         <button

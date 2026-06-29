@@ -1,4 +1,5 @@
 use crate::models::{Candle, Indicators, MaSeries, PriceSummary, SymbolInfo};
+use chrono::Local;
 
 /// Standard MA periods displayed across the app.
 pub const MA_PERIODS: [u32; 4] = [5, 20, 60, 200];
@@ -51,6 +52,11 @@ pub fn build_summary(info: &SymbolInfo, candles: &[Candle], ma: &[MaSeries]) -> 
     }
     let last = &candles[n - 1];
     let prev_close = if n >= 2 { candles[n - 2].close } else { last.open };
+    // Reference for today's live change: if the latest bar is today, use the
+    // prior session; otherwise the latest bar IS the prior session (today's EOD
+    // bar isn't posted yet during market hours).
+    let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+    let ref_close = if last.date == today { prev_close } else { last.close };
     // ~5 trading days ago for a week, ~20 for a month.
     let week_base = candles.get(n.saturating_sub(6)).map(|c| c.close);
     let month_base = candles.get(n.saturating_sub(21)).map(|c| c.close);
@@ -72,6 +78,7 @@ pub fn build_summary(info: &SymbolInfo, candles: &[Candle], ma: &[MaSeries]) -> 
         low: last.low,
         close: last.close,
         prev_close,
+        ref_close,
         change: last.close - prev_close,
         change_pct: pct_change(last.close, prev_close).unwrap_or(0.0),
         week_change_pct: week_base.and_then(|b| pct_change(last.close, b)),

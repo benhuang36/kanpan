@@ -49,6 +49,7 @@ export interface PriceSummary {
   low: number;
   close: number;
   prev_close: number;
+  ref_close: number;
   change: number;
   change_pct: number;
   week_change_pct: number | null;

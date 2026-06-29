@@ -29,10 +29,10 @@ function MaTag({ label, value, price }: { label: string; value: number | null; p
 export default function PriceHeader({ s, rt }: { s: PriceSummary; rt?: RealtimeQuote }) {
   const live = rt && rt.last_price > 0;
   const price = live ? rt!.last_price : s.close;
-  const change = live ? rt!.last_price - s.prev_close : s.change;
+  const change = live ? rt!.last_price - s.ref_close : s.change;
   const changePct = live
-    ? s.prev_close
-      ? ((rt!.last_price - s.prev_close) / s.prev_close) * 100
+    ? s.ref_close
+      ? ((rt!.last_price - s.ref_close) / s.ref_close) * 100
       : 0
     : s.change_pct;
   const volume = live && rt!.total_volume > 0 ? rt!.total_volume : s.volume;

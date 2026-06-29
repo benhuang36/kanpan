@@ -166,12 +166,19 @@ fn day_pct(db: &Arc<Mutex<Connection>>, quotes: &QuoteMap, id: &str) -> Option<f
     if n < 2 {
         return None;
     }
-    let prev_close = candles[n - 2].close;
-    if prev_close == 0.0 {
+    let last = &candles[n - 1];
+    let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+    // Reference close for today's move (today's EOD bar may not be posted yet).
+    let ref_close = if last.date == today {
+        candles[n - 2].close
+    } else {
+        last.close
+    };
+    if ref_close == 0.0 {
         return None;
     }
-    let price = live_price(quotes, id).unwrap_or(candles[n - 1].close);
-    Some((price - prev_close) / prev_close * 100.0)
+    let price = live_price(quotes, id).unwrap_or(last.close);
+    Some((price - ref_close) / ref_close * 100.0)
 }
 
 fn last_rsi(db: &Arc<Mutex<Connection>>, id: &str) -> Option<f64> {

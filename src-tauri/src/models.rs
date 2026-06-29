@@ -87,6 +87,10 @@ pub struct PriceSummary {
     pub low: f64,
     pub close: f64,
     pub prev_close: f64,
+    /// Reference close for computing *today's* live change: the last completed
+    /// session's close. Equals prev_close once today's EOD bar exists, otherwise
+    /// equals the latest bar's close (today not yet posted by FinMind intraday).
+    pub ref_close: f64,
     pub change: f64,
     pub change_pct: f64,
     pub week_change_pct: Option<f64>,

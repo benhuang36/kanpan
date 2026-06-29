@@ -30,7 +30,7 @@ export function buildAnalysisPrompt(detail: StockDetail, rt?: RealtimeQuote): st
   const s = detail.summary;
   const live = rt && rt.last_price > 0;
   const price = live ? rt!.last_price : s.close;
-  const changePct = live && s.prev_close ? ((rt!.last_price - s.prev_close) / s.prev_close) * 100 : s.change_pct;
+  const changePct = live && s.ref_close ? ((rt!.last_price - s.ref_close) / s.ref_close) * 100 : s.change_pct;
 
   const rsi = lastNonNull(detail.indicators.rsi14);
   const k = lastNonNull(detail.indicators.k);
