@@ -7,7 +7,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { IntradayCandle } from "../types";
-import { changeColor, fmtPct, fmtPrice, fmtSigned, fmtVolumeLots } from "../format";
+import { changeColor, fmtPct, fmtPrice, fmtSigned, fmtLotsVolume } from "../format";
 
 // Taipei is UTC+8; lightweight-charts renders UTC timestamps, so we shift the
 // epoch by 8h to make the axis read as local wall-clock time.
@@ -167,7 +167,7 @@ export default function IntradayChart({ candles }: { candles: IntradayCandle[] }
           <div className="mt-0.5 flex flex-wrap gap-x-2 tabular-nums">
             <span className={changeColor(legend.change)}>漲 {fmtSigned(legend.change)}</span>
             <span className={changeColor(legend.change)}>幅 {fmtPct(legend.changePct)}</span>
-            <span className="text-[var(--color-muted)]">量 {fmtVolumeLots(legend.volume)}</span>
+            <span className="text-[var(--color-muted)]">量 {fmtLotsVolume(legend.volume)}</span>
           </div>
         </div>
       )}

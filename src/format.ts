@@ -35,10 +35,17 @@ export function fmtLots(shares: number | null | undefined): string {
   return `${lots > 0 ? "+" : ""}${lots.toLocaleString("en-US")}`;
 }
 
-/** Trading volume (shares) → 張, compact. */
+/** Trading volume (shares) → 張, compact. (FinMind volumes are in shares.) */
 export function fmtVolumeLots(shares: number | null | undefined): string {
   if (shares == null) return "—";
   const lots = sharesToLots(shares);
   if (lots >= 10000) return `${(lots / 10000).toFixed(1)} 萬張`;
   return `${lots.toLocaleString("en-US")} 張`;
+}
+
+/** Volume already in 張 (lots), compact. (Fugle candle/total volume is in 張.) */
+export function fmtLotsVolume(lots: number | null | undefined): string {
+  if (lots == null) return "—";
+  if (lots >= 10000) return `${(lots / 10000).toFixed(1)} 萬張`;
+  return `${Math.round(lots).toLocaleString("en-US")} 張`;
 }

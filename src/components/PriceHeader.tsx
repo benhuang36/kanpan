@@ -1,5 +1,5 @@
 import type { PriceSummary, RealtimeQuote } from "../types";
-import { changeColor, fmtPct, fmtPrice, fmtSigned, fmtVolumeLots } from "../format";
+import { changeColor, fmtPct, fmtPrice, fmtSigned, fmtVolumeLots, fmtLotsVolume } from "../format";
 import InfoTip from "./InfoTip";
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -35,7 +35,9 @@ export default function PriceHeader({ s, rt }: { s: PriceSummary; rt?: RealtimeQ
       ? ((rt!.last_price - s.ref_close) / s.ref_close) * 100
       : 0
     : s.change_pct;
-  const volume = live && rt!.total_volume > 0 ? rt!.total_volume : s.volume;
+  // FinMind EOD volume is in shares; Fugle realtime total volume is in 張.
+  const volumeText =
+    live && rt!.total_volume > 0 ? fmtLotsVolume(rt!.total_volume) : fmtVolumeLots(s.volume);
   const color = changeColor(change);
 
   return (
@@ -92,7 +94,7 @@ export default function PriceHeader({ s, rt }: { s: PriceSummary; rt?: RealtimeQ
               {fmtPct(s.month_change_pct)}
             </div>
           </div>
-          <Stat label="成交量" value={fmtVolumeLots(volume)} />
+          <Stat label="成交量" value={volumeText} />
         </div>
       </div>
 
