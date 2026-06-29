@@ -118,15 +118,15 @@ export default function IntradayChart({ candles }: { candles: IntradayCandle[] }
       };
     };
 
-    setLegend(buildLegend(candles.length - 1));
+    // Show the legend only while hovering; hide it when the cursor leaves.
     const LEGEND_ZONE = 260;
     chart.subscribeCrosshairMove((param) => {
-      const i =
-        param.logical != null ? Math.round(param.logical as number) : candles.length - 1;
-      const next = buildLegend(i);
-      if (next) setLegend(next);
-      const x = param.point?.x;
-      if (x != null) setSide(x < LEGEND_ZONE ? "right" : "left");
+      if (!param.point || param.logical == null) {
+        setLegend(null);
+        return;
+      }
+      setLegend(buildLegend(Math.round(param.logical as number)));
+      setSide((param.point.x as number) < LEGEND_ZONE ? "right" : "left");
     });
 
     return () => {
