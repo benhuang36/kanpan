@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import {
@@ -59,9 +59,45 @@ export default function Settings({ onClose }: { onClose: () => void }) {
   const [aiT, setAiT] = useState<TestState>(IDLE);
   const [updateMsg, setUpdateMsg] = useState("");
   const [autostartOn, setAutostartOn] = useState(false);
+  const initialAutostart = useRef<boolean | null>(null);
+
+  // Snapshot of live-applied prefs at open time, so 取消 can revert them.
+  const [snapshot] = useState(() => {
+    const s = useStore.getState();
+    return {
+      theme: s.theme,
+      colorUp: s.colorUp,
+      closeBehavior: s.closeBehavior,
+      defaultView: s.defaultView,
+      defaultTimeframe: s.defaultTimeframe,
+      maVisible: [...s.maVisible],
+      autoCheckUpdate: s.autoCheckUpdate,
+      aiTemperature: s.aiTemperature,
+      aiTone: s.aiTone,
+      pollMinutes: s.pollMinutes,
+    };
+  });
 
   useEffect(() => {
-    isEnabled().then(setAutostartOn).catch(() => {});
+    isEnabled()
+      .then((on) => {
+        setAutostartOn(on);
+        if (initialAutostart.current === null) initialAutostart.current = on;
+      })
+      .catch(() => {});
+  }, []);
+
+  // Esc reverts (same as 取消). Capture phase so it beats the global handler.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        cancel();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runTest = async (
@@ -93,7 +129,18 @@ export default function Settings({ onClose }: { onClose: () => void }) {
     setUpdateMsg(v ? `有新版本 v${v}` : "已是最新版本");
   };
 
-  // Save (keys) and close. Preferences below are applied live via the store.
+  // Revert live-applied prefs to the open-time snapshot, then close.
+  const cancel = async () => {
+    const { pollMinutes, ...prefs } = snapshot;
+    store.setPrefs(prefs);
+    store.setPollMinutes(pollMinutes);
+    if (initialAutostart.current !== null && initialAutostart.current !== autostartOn) {
+      await toggleAutostart(initialAutostart.current);
+    }
+    onClose();
+  };
+
+  // Save (keys) and close. Preferences are applied live via the store.
   const save = async () => {
     store.setToken(value);
     store.setFugleKey(fugle);
@@ -112,7 +159,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50" onClick={cancel}>
       <div
         className="max-h-[86vh] w-[560px] overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] p-5"
         onClick={(e) => e.stopPropagation()}
@@ -245,9 +292,10 @@ export default function Settings({ onClose }: { onClose: () => void }) {
         </Section>
 
         <p className="mt-4 text-[11px] text-[var(--color-muted)]">
-          外觀、圖表、系統等偏好即時生效；API 金鑰於按「完成」時儲存。
+          外觀、圖表等偏好即時預覽；按「取消」可還原這次的改動，按「完成」套用並儲存金鑰。
         </p>
-        <div className="mt-2 flex justify-end">
+        <div className="mt-2 flex justify-end gap-2">
+          <button onClick={cancel} className="rounded-md border border-[var(--color-border)] px-4 py-1.5 text-sm hover:bg-[var(--color-panel-2)]">取消</button>
           <button onClick={save} className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium hover:bg-blue-500">完成</button>
         </div>
       </div>
