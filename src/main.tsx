@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import App from "./App";
 import "./index.css";
 
@@ -30,3 +31,13 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+// Reveal the window only after the first frame is painted (window starts hidden
+// with a dark background) to avoid the white flash on startup.
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    getCurrentWindow()
+      .show()
+      .catch(() => {});
+  });
+});
