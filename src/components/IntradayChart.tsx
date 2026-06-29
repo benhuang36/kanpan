@@ -29,7 +29,14 @@ export default function IntradayChart({ candles }: { candles: IntradayCandle[] }
       grid: { vertLines: { color: "#1b2130" }, horzLines: { color: "#1b2130" } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: "#232a3a" },
-      timeScale: { borderColor: "#232a3a", timeVisible: true, secondsVisible: false },
+      timeScale: {
+        borderColor: "#232a3a",
+        timeVisible: true,
+        secondsVisible: false,
+        // Cap zoom-out so the data can't shrink below the full chart width.
+        fixLeftEdge: true,
+        fixRightEdge: true,
+      },
       autoSize: true,
     });
     chartRef.current = chart;

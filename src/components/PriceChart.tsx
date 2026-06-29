@@ -40,7 +40,13 @@ export default function PriceChart({
       },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: "#232a3a" },
-      timeScale: { borderColor: "#232a3a", rightOffset: 4 },
+      timeScale: {
+        borderColor: "#232a3a",
+        rightOffset: 4,
+        // Cap zoom-out so the data can't shrink below the full chart width.
+        fixLeftEdge: true,
+        fixRightEdge: true,
+      },
       autoSize: true,
     });
     chartRef.current = chart;
