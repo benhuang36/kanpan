@@ -40,6 +40,7 @@ interface AppState {
 
   add: (s: SymbolInfo) => void;
   remove: (stockId: string) => void;
+  reorder: (from: number, to: number) => void;
   select: (stockId: string) => void;
   setView: (v: ViewMode) => void;
   setToken: (t: string) => void;
@@ -82,6 +83,16 @@ export const useStore = create<AppState>()(
           const selected =
             state.selected === stockId ? watchlist[0]?.stock_id ?? null : state.selected;
           return { watchlist, selected };
+        }),
+
+      reorder: (from, to) =>
+        set((state) => {
+          if (from === to || from < 0 || to < 0) return {};
+          const list = [...state.watchlist];
+          if (from >= list.length || to >= list.length) return {};
+          const [moved] = list.splice(from, 1);
+          list.splice(to, 0, moved);
+          return { watchlist: list };
         }),
 
       select: (stockId) => set({ selected: stockId }),

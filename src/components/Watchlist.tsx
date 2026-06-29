@@ -1,9 +1,26 @@
+import { useState } from "react";
 import { useStockDetail } from "../hooks";
 import { useQuote } from "../realtime";
 import { useStore, type WatchItem } from "../store";
 import { changeColor, fmtPct, fmtPrice } from "../format";
 
-function Row({ item }: { item: WatchItem }) {
+function Row({
+  item,
+  index,
+  dragOver,
+  onDragStart,
+  onDragEnter,
+  onDrop,
+  onDragEnd,
+}: {
+  item: WatchItem;
+  index: number;
+  dragOver: boolean;
+  onDragStart: (i: number) => void;
+  onDragEnter: (i: number) => void;
+  onDrop: () => void;
+  onDragEnd: () => void;
+}) {
   const selected = useStore((s) => s.selected);
   const select = useStore((s) => s.select);
   const remove = useStore((s) => s.remove);
@@ -22,16 +39,33 @@ function Row({ item }: { item: WatchItem }) {
 
   return (
     <div
+      draggable
+      onDragStart={() => onDragStart(index)}
+      onDragEnter={() => onDragEnter(index)}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       onClick={() => select(item.stock_id)}
-      className={`group flex cursor-pointer items-center justify-between border-l-2 px-3 py-2 ${
+      className={`group flex cursor-pointer items-center justify-between border-l-2 px-2 py-2 ${
+        dragOver ? "border-t border-t-blue-500" : ""
+      } ${
         active
-          ? "border-blue-500 bg-[var(--color-panel-2)]"
-          : "border-transparent hover:bg-[var(--color-panel-2)]"
+          ? "border-l-blue-500 bg-[var(--color-panel-2)]"
+          : "border-l-transparent hover:bg-[var(--color-panel-2)]"
       }`}
     >
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium">{item.stock_name}</div>
-        <div className="font-mono text-xs text-[var(--color-muted)]">{item.stock_id}</div>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span
+          className="cursor-grab text-[var(--color-muted)] opacity-0 group-hover:opacity-60"
+          title="拖曳排序"
+          aria-hidden="true"
+        >
+          ⠿
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">{item.stock_name}</div>
+          <div className="font-mono text-xs text-[var(--color-muted)]">{item.stock_id}</div>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <div className="text-right">
@@ -59,6 +93,17 @@ function Row({ item }: { item: WatchItem }) {
 
 export default function Watchlist() {
   const watchlist = useStore((s) => s.watchlist);
+  const reorder = useStore((s) => s.reorder);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
+  const handleDrop = () => {
+    if (dragIndex != null && overIndex != null) {
+      reorder(dragIndex, overIndex);
+    }
+    setDragIndex(null);
+    setOverIndex(null);
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -71,7 +116,21 @@ export default function Watchlist() {
             用上方搜尋框加入股票
           </div>
         ) : (
-          watchlist.map((item) => <Row key={item.stock_id} item={item} />)
+          watchlist.map((item, index) => (
+            <Row
+              key={item.stock_id}
+              item={item}
+              index={index}
+              dragOver={overIndex === index && dragIndex !== index}
+              onDragStart={setDragIndex}
+              onDragEnter={setOverIndex}
+              onDrop={handleDrop}
+              onDragEnd={() => {
+                setDragIndex(null);
+                setOverIndex(null);
+              }}
+            />
+          ))
         )}
       </div>
     </div>
