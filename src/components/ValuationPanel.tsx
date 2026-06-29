@@ -60,8 +60,10 @@ export default function ValuationPanel({
         />
       </div>
 
-      <div className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-        融資融券 (張) {m ? `· ${m.date}` : ""}
+      <div className="mb-2 mt-4 flex items-center text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+        融資融券 (張) · 散戶情緒參考
+        <InfoTip term="retail" />
+        {m ? <span className="ml-1 normal-case">· {m.date}</span> : null}
       </div>
       {m ? (
         <div className="grid grid-cols-3 gap-2">
