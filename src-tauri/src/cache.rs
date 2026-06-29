@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::models::{Candle, InstitutionalDay, MarginDay, SymbolInfo, Valuation};
+use crate::models::{Candle, InstitutionalDay, MarginDay, SplitEvent, SymbolInfo, Valuation};
 use rusqlite::{params, Connection};
 
 /// Initialise the schema. Idempotent.
@@ -45,6 +45,12 @@ pub fn init(conn: &Connection) -> Result<()> {
             margin_change  REAL NOT NULL,
             short_balance  REAL NOT NULL,
             short_change   REAL NOT NULL,
+            PRIMARY KEY (stock_id, date)
+        );
+        CREATE TABLE IF NOT EXISTS splits (
+            stock_id TEXT NOT NULL,
+            date     TEXT NOT NULL,
+            factor   REAL NOT NULL,
             PRIMARY KEY (stock_id, date)
         );
         CREATE TABLE IF NOT EXISTS meta (
@@ -334,6 +340,36 @@ pub fn upsert_margin(conn: &mut Connection, stock_id: &str, rows: &[MarginDay]) 
     }
     tx.commit()?;
     Ok(())
+}
+
+// ---- splits ----
+
+pub fn upsert_splits(conn: &mut Connection, stock_id: &str, splits: &[SplitEvent]) -> Result<()> {
+    let tx = conn.transaction()?;
+    {
+        let mut stmt = tx.prepare(
+            "INSERT INTO splits(stock_id, date, factor) VALUES(?1, ?2, ?3)
+             ON CONFLICT(stock_id, date) DO UPDATE SET factor = excluded.factor",
+        )?;
+        for s in splits {
+            stmt.execute(params![stock_id, s.date, s.factor])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn get_splits(conn: &Connection, stock_id: &str, since: &str) -> Result<Vec<SplitEvent>> {
+    let mut stmt = conn.prepare(
+        "SELECT date, factor FROM splits WHERE stock_id = ?1 AND date >= ?2 ORDER BY date ASC",
+    )?;
+    let rows = stmt.query_map(params![stock_id, since], |r| {
+        Ok(SplitEvent {
+            date: r.get(0)?,
+            factor: r.get(1)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 pub fn get_margin(conn: &Connection, stock_id: &str, since: &str) -> Result<Vec<MarginDay>> {

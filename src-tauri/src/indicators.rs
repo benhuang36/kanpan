@@ -1,5 +1,26 @@
-use crate::models::{Candle, Indicators, MaSeries, PriceSummary, SymbolInfo};
+use crate::models::{Candle, Indicators, MaSeries, PriceSummary, SplitEvent, SymbolInfo};
 use chrono::Local;
+
+/// Back-adjust an ascending candle series for stock splits so the chart and
+/// indicators are continuous. For each split, bars strictly before its date are
+/// scaled: prices × factor (after/before), volume × 1/factor (share count grows).
+pub fn apply_splits(candles: &mut [Candle], splits: &[SplitEvent]) {
+    for s in splits {
+        if s.factor <= 0.0 {
+            continue;
+        }
+        let vol_factor = 1.0 / s.factor;
+        for c in candles.iter_mut() {
+            if c.date < s.date {
+                c.open *= s.factor;
+                c.high *= s.factor;
+                c.low *= s.factor;
+                c.close *= s.factor;
+                c.volume *= vol_factor;
+            }
+        }
+    }
+}
 
 /// Standard MA periods displayed across the app.
 pub const MA_PERIODS: [u32; 4] = [5, 20, 60, 200];

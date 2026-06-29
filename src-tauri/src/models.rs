@@ -34,6 +34,14 @@ pub struct AlertRule {
     pub enabled: bool,
 }
 
+/// A stock-split event. `factor` = after_price / before_price (e.g. a 22:1
+/// split is ~0.045); historical bars before `date` are multiplied by it.
+#[derive(Debug, Clone)]
+pub struct SplitEvent {
+    pub date: String,
+    pub factor: f64,
+}
+
 /// One trading day OHLCV bar. `volume` is in shares.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Candle {

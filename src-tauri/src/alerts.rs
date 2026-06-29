@@ -8,7 +8,7 @@
 //! configured poll interval.
 
 use crate::cache;
-use crate::indicators::rsi;
+use crate::indicators::{apply_splits, rsi};
 use crate::models::{AlertKind, AlertRule};
 use crate::providers::finmind::FinMind;
 use crate::providers::fugle::QuoteMap;
@@ -182,13 +182,16 @@ fn day_pct(db: &Arc<Mutex<Connection>>, quotes: &QuoteMap, id: &str) -> Option<f
 }
 
 fn last_rsi(db: &Arc<Mutex<Connection>>, id: &str) -> Option<f64> {
-    let candles = {
+    let (mut candles, splits) = {
         let conn = db.lock().ok()?;
-        cache::get_prices(&conn, id, &lookback(400)).ok()?
+        let candles = cache::get_prices(&conn, id, &lookback(400)).ok()?;
+        let splits = cache::get_splits(&conn, id, &lookback(400)).ok()?;
+        (candles, splits)
     };
     if candles.len() < 15 {
         return None;
     }
+    apply_splits(&mut candles, &splits);
     let closes: Vec<f64> = candles.iter().map(|c| c.close).collect();
     rsi(&closes, 14).iter().rev().flatten().next().copied()
 }

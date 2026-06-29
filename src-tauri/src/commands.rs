@@ -1,6 +1,6 @@
 use crate::cache;
 use crate::error::{AppError, Result};
-use crate::indicators::{build_indicators, build_ma, build_summary};
+use crate::indicators::{apply_splits, build_indicators, build_ma, build_summary};
 use crate::models::{StockDetail, SymbolInfo};
 use crate::alerts::AlertState;
 use crate::models::{AlertRule, IntradayCandle};
@@ -196,8 +196,23 @@ pub async fn get_stock_detail(
         }
     }
 
+    // --- splits (for back-adjusting the chart/indicators) ---
+    let split_key = format!("splits_fetched:{stock_id}");
+    let need_splits = {
+        let conn = state.db.lock().unwrap();
+        !fresh(&conn, &split_key, HISTORY_TTL_SECS)
+    };
+    if need_splits {
+        if let Ok(splits) = state.finmind.splits(&stock_id, &price_start).await {
+            let mut conn = state.db.lock().unwrap();
+            cache::upsert_splits(&mut conn, &stock_id, &splits)?;
+            cache::meta_set(&conn, &split_key, &now_unix().to_string())?;
+        }
+    }
+
     let conn = state.db.lock().unwrap();
-    let candles = cache::get_prices(&conn, &stock_id, &price_start)?;
+    let mut candles = cache::get_prices(&conn, &stock_id, &price_start)?;
+    let splits = cache::get_splits(&conn, &stock_id, &price_start)?;
     let institutional = cache::get_institutional(&conn, &stock_id, &inst_start)?;
     let valuation = cache::latest_per(&conn, &stock_id)?;
     let margin = cache::get_margin(&conn, &stock_id, &inst_start)?;
@@ -206,6 +221,8 @@ pub async fn get_stock_detail(
     if candles.is_empty() {
         return Err(AppError::msg(format!("查無 {stock_id} 的歷史資料")));
     }
+    // Back-adjust historical bars for splits so the series is continuous.
+    apply_splits(&mut candles, &splits);
     let ma = build_ma(&candles);
     let indicators = build_indicators(&candles);
     let summary = build_summary(&info, &candles, &ma)

@@ -1,5 +1,5 @@
 use crate::error::{AppError, Result};
-use crate::models::{Candle, InstitutionalDay, MarginDay, SymbolInfo, Valuation};
+use crate::models::{Candle, InstitutionalDay, MarginDay, SplitEvent, SymbolInfo, Valuation};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::RwLock;
@@ -160,6 +160,30 @@ impl FinMind {
                 total_net: foreign_net + trust_net + dealer_net,
             })
             .collect())
+    }
+
+    /// Stock-split events from `start_date`, ascending. factor = after / before.
+    pub async fn splits(&self, stock_id: &str, start_date: &str) -> Result<Vec<SplitEvent>> {
+        let rows = self
+            .fetch("TaiwanStockSplitPrice", Some(stock_id), Some(start_date))
+            .await?;
+        let mut out: Vec<SplitEvent> = rows
+            .iter()
+            .filter_map(|r| {
+                let date = str_field(r, "date");
+                let before = num_field(r, "before_price");
+                let after = num_field(r, "after_price");
+                if date.is_empty() || before <= 0.0 || after <= 0.0 {
+                    return None;
+                }
+                Some(SplitEvent {
+                    date,
+                    factor: after / before,
+                })
+            })
+            .collect();
+        out.sort_by(|a, b| a.date.cmp(&b.date));
+        Ok(out)
     }
 
     /// Valuation series (PER / PBR / 殖利率) from `start_date`, ascending.
