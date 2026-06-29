@@ -32,10 +32,13 @@ export interface AlertRule {
 
 interface AppState {
   watchlist: WatchItem[];
+  watchlistUpdatedAt: number;
   selected: string | null;
   view: ViewMode;
   finmindToken: string;
   fugleKey: string;
+  googleClientId: string;
+  googleClientSecret: string;
   aiEndpoint: string;
   aiKey: string;
   aiModel: string;
@@ -66,6 +69,8 @@ interface AppState {
   removeAlert: (id: string) => void;
   toggleAlert: (id: string) => void;
   setPrefs: (p: Partial<Prefs>) => void;
+  setGoogle: (id: string, secret: string) => void;
+  applyRemoteWatchlist: (items: WatchItem[], updatedAt: number) => void;
 }
 
 interface Prefs {
@@ -84,10 +89,13 @@ export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       watchlist: [],
+      watchlistUpdatedAt: 0,
       selected: null,
       view: "focus",
       finmindToken: "",
       fugleKey: "",
+      googleClientId: "",
+      googleClientSecret: "",
       aiEndpoint: "https://api.openai.com/v1",
       aiKey: "",
       aiModel: "gpt-4o-mini",
@@ -112,6 +120,7 @@ export const useStore = create<AppState>()(
         set((state) => ({
           watchlist: [...state.watchlist, { stock_id: s.stock_id, stock_name: s.stock_name }],
           selected: s.stock_id,
+          watchlistUpdatedAt: Date.now(),
         }));
       },
 
@@ -120,7 +129,7 @@ export const useStore = create<AppState>()(
           const watchlist = state.watchlist.filter((w) => w.stock_id !== stockId);
           const selected =
             state.selected === stockId ? watchlist[0]?.stock_id ?? null : state.selected;
-          return { watchlist, selected };
+          return { watchlist, selected, watchlistUpdatedAt: Date.now() };
         }),
 
       reorder: (from, to) =>
@@ -130,7 +139,7 @@ export const useStore = create<AppState>()(
           if (from >= list.length || to >= list.length) return {};
           const [moved] = list.splice(from, 1);
           list.splice(to, 0, moved);
-          return { watchlist: list };
+          return { watchlist: list, watchlistUpdatedAt: Date.now() };
         }),
 
       select: (stockId) => set({ selected: stockId }),
@@ -141,6 +150,16 @@ export const useStore = create<AppState>()(
         set({ aiEndpoint: endpoint, aiKey: key, aiModel: model }),
       setPollMinutes: (pollMinutes) => set({ pollMinutes }),
       setPrefs: (p) => set(p),
+      setGoogle: (googleClientId, googleClientSecret) =>
+        set({ googleClientId, googleClientSecret }),
+      applyRemoteWatchlist: (items, updatedAt) =>
+        set((state) => ({
+          watchlist: items,
+          watchlistUpdatedAt: updatedAt,
+          selected: items.some((w) => w.stock_id === state.selected)
+            ? state.selected
+            : items[0]?.stock_id ?? null,
+        })),
 
       addAlert: (a) =>
         set((state) => ({

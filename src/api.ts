@@ -51,3 +51,12 @@ export const testFugle = (key: string) => invoke<string>("test_fugle", { key });
 
 export const testAi = (endpoint: string, apiKey: string, model: string) =>
   invoke<string>("test_ai", { endpoint, apiKey, model });
+
+// Google sync
+export const googleSignIn = (clientId: string, clientSecret: string) =>
+  invoke<string>("google_sign_in", { clientId, clientSecret });
+export const googleStatus = () => invoke<string | null>("google_status");
+export const googleSignOut = () => invoke<void>("google_sign_out");
+export const googleSyncPull = () => invoke<string | null>("google_sync_pull");
+export const googleSyncPush = (content: string) =>
+  invoke<void>("google_sync_push", { content });

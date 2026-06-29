@@ -9,8 +9,18 @@ import {
   type Timeframe,
   type ViewMode,
 } from "../store";
-import { setFinmindToken, setFugleKey, testFinmind, testFugle, testAi } from "../api";
+import {
+  setFinmindToken,
+  setFugleKey,
+  testFinmind,
+  testFugle,
+  testAi,
+  googleSignIn,
+  googleStatus,
+  googleSignOut,
+} from "../api";
 import { checkForUpdate } from "../update";
+import { syncNow } from "../sync";
 
 type TestState = { state: "idle" | "testing" | "ok" | "err"; msg: string };
 const IDLE: TestState = { state: "idle", msg: "" };
@@ -60,6 +70,12 @@ export default function Settings({ onClose }: { onClose: () => void }) {
   const [updateMsg, setUpdateMsg] = useState("");
   const [autostartOn, setAutostartOn] = useState(false);
   const initialAutostart = useRef<boolean | null>(null);
+
+  // Google sync
+  const [gId, setGId] = useState(store.googleClientId);
+  const [gSecret, setGSecret] = useState(store.googleClientSecret);
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+  const [googleMsg, setGoogleMsg] = useState("");
 
   // Snapshot of live-applied prefs at open time, so 取消 can revert them.
   const [snapshot] = useState(() => {
@@ -129,6 +145,39 @@ export default function Settings({ onClose }: { onClose: () => void }) {
     setUpdateMsg(v ? `有新版本 v${v}` : "已是最新版本");
   };
 
+  useEffect(() => {
+    googleStatus().then(setGoogleEmail).catch(() => {});
+  }, []);
+
+  const doGoogleSignIn = async () => {
+    store.setGoogle(gId, gSecret);
+    setGoogleMsg("等待瀏覽器授權…");
+    try {
+      const email = await googleSignIn(gId, gSecret);
+      setGoogleEmail(email);
+      setGoogleMsg("登入成功");
+      await syncNow();
+    } catch (e) {
+      setGoogleMsg(String((e as Error)?.message ?? e));
+    }
+  };
+
+  const doGoogleSignOut = async () => {
+    await googleSignOut();
+    setGoogleEmail(null);
+    setGoogleMsg("");
+  };
+
+  const doSync = async () => {
+    setGoogleMsg("同步中…");
+    try {
+      const r = await syncNow();
+      setGoogleMsg(r === "pulled" ? "已從雲端更新" : r === "pushed" ? "已上傳雲端" : "已是最新");
+    } catch (e) {
+      setGoogleMsg(String((e as Error)?.message ?? e));
+    }
+  };
+
   // Revert live-applied prefs to the open-time snapshot, then close.
   const cancel = async () => {
     const { pollMinutes, ...prefs } = snapshot;
@@ -145,6 +194,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
     store.setToken(value);
     store.setFugleKey(fugle);
     store.setAi({ endpoint, key: aiK, model });
+    store.setGoogle(gId, gSecret);
     await setFinmindToken(value || null);
     if (fugle) await setFugleKey(fugle);
     qc.invalidateQueries();
@@ -260,6 +310,27 @@ export default function Settings({ onClose }: { onClose: () => void }) {
               </select>
             </label>
           </div>
+        </Section>
+
+        <Section title="Google 同步（自選股）">
+          {googleEmail ? (
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span>已登入：<b>{googleEmail}</b></span>
+              <button onClick={doSync} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium hover:bg-blue-500">立即同步</button>
+              <button onClick={doGoogleSignOut} className="rounded-md border border-[var(--color-border)] px-3 py-1 text-xs hover:bg-[var(--color-panel-2)]">登出</button>
+            </div>
+          ) : (
+            <>
+              <p className="mb-2 text-xs text-[var(--color-muted)]">
+                在 Google Cloud 建立「桌面應用程式」OAuth client（啟用 Drive API），把 Client ID /
+                Secret 填入後登入，自選股會同步到你自己的 Google Drive。
+              </p>
+              <input value={gId} onChange={(e) => setGId(e.target.value)} placeholder="Google Client ID" className={`${inputCls} mb-2`} />
+              <input value={gSecret} onChange={(e) => setGSecret(e.target.value)} type="password" placeholder="Google Client Secret" className={inputCls} />
+              <button onClick={doGoogleSignIn} className="mt-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium hover:bg-blue-500">使用 Google 登入</button>
+            </>
+          )}
+          {googleMsg && <div className="mt-2 text-xs text-[var(--color-muted)]">{googleMsg}</div>}
         </Section>
 
         <Section title="系統">

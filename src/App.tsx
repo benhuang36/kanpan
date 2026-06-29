@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "./store";
 import {
   setFinmindToken,
@@ -7,9 +7,11 @@ import {
   pushAlerts,
   pushPollMinutes,
   setCloseToTray,
+  googleStatus,
 } from "./api";
 import { startRealtimeListener } from "./realtime";
 import { applyTheme } from "./theme";
+import { syncNow } from "./sync";
 import SearchBar from "./components/SearchBar";
 import Watchlist from "./components/Watchlist";
 import StockDetail from "./components/StockDetail";
@@ -59,6 +61,25 @@ function App() {
   useEffect(() => {
     setCloseToTray(closeBehavior === "tray");
   }, [closeBehavior]);
+
+  // Google sync: pull on startup, then debounce-sync on watch-list changes.
+  const syncedInit = useRef(false);
+  const watchlistUpdatedAt = useStore((s) => s.watchlistUpdatedAt);
+  useEffect(() => {
+    const trySync = () =>
+      googleStatus()
+        .then((email) => {
+          if (email) syncNow().catch(() => {});
+        })
+        .catch(() => {});
+    if (!syncedInit.current) {
+      syncedInit.current = true;
+      trySync();
+      return;
+    }
+    const t = setTimeout(trySync, 3000);
+    return () => clearTimeout(t);
+  }, [watchlistUpdatedAt]);
 
   // Keyboard: Cmd/Ctrl+, opens settings; Esc closes open modals.
   useEffect(() => {

@@ -2,6 +2,7 @@ mod alerts;
 mod cache;
 mod commands;
 mod error;
+mod gsync;
 mod indicators;
 mod models;
 mod providers;
@@ -126,6 +127,11 @@ pub fn run() {
             commands::test_finmind,
             commands::test_fugle,
             commands::test_ai,
+            gsync::google_sign_in,
+            gsync::google_status,
+            gsync::google_sign_out,
+            gsync::google_sync_pull,
+            gsync::google_sync_push,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

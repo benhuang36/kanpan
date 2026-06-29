@@ -34,3 +34,8 @@ thiserror = "2"
 dirs = "5"
 futures-util = "0.3"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+urlencoding = "2"
+webbrowser = "1"
