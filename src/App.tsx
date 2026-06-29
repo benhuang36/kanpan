@@ -10,6 +10,7 @@ import CompareView from "./components/CompareView";
 import TableView from "./components/TableView";
 import Settings from "./components/Settings";
 import AlertsModal from "./components/AlertsModal";
+import UpdateBanner from "./components/UpdateBanner";
 import { AppLogo, BellIcon } from "./components/icons";
 import type { ViewMode } from "./store";
 
@@ -75,7 +76,8 @@ function App() {
   }, [pollMinutes]);
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="relative flex h-screen flex-col">
+      <UpdateBanner />
       <header className="flex items-center gap-4 border-b border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-2">
         <div className="flex items-center gap-2 whitespace-nowrap text-sm font-semibold">
           <AppLogo size={22} />

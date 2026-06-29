@@ -6,7 +6,9 @@
   "permissions": [
     "core:default",
     "core:window:allow-show",
+    "core:app:allow-version",
     "opener:default",
+    "opener:allow-open-url",
     "store:default",
     "notification:default"
   ]
