@@ -31,7 +31,12 @@ export default function CompareView() {
       },
       grid: { vertLines: { color: "#1b2130" }, horzLines: { color: "#1b2130" } },
       rightPriceScale: { borderColor: "#232a3a" },
-      timeScale: { borderColor: "#232a3a" },
+      timeScale: {
+        borderColor: "#232a3a",
+        // Cap zoom-out so the data can't shrink below the full chart width.
+        fixLeftEdge: true,
+        fixRightEdge: true,
+      },
       autoSize: true,
     });
 

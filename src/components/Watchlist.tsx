@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStockDetail } from "../hooks";
 import { useQuote } from "../realtime";
 import { useStore, type WatchItem } from "../store";
@@ -7,19 +7,13 @@ import { changeColor, fmtPct, fmtPrice } from "../format";
 function Row({
   item,
   index,
-  dragOver,
-  onDragStart,
-  onDragEnter,
-  onDrop,
-  onDragEnd,
+  over,
+  onGripDown,
 }: {
   item: WatchItem;
   index: number;
-  dragOver: boolean;
-  onDragStart: (i: number) => void;
-  onDragEnter: (i: number) => void;
-  onDrop: () => void;
-  onDragEnd: () => void;
+  over: boolean;
+  onGripDown: (index: number, e: React.PointerEvent) => void;
 }) {
   const selected = useStore((s) => s.selected);
   const select = useStore((s) => s.select);
@@ -39,15 +33,10 @@ function Row({
 
   return (
     <div
-      draggable
-      onDragStart={() => onDragStart(index)}
-      onDragEnter={() => onDragEnter(index)}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
+      data-row-index={index}
       onClick={() => select(item.stock_id)}
       className={`group flex cursor-pointer items-center justify-between border-l-2 px-2 py-2 ${
-        dragOver ? "border-t border-t-blue-500" : ""
+        over ? "border-t border-t-blue-500" : ""
       } ${
         active
           ? "border-l-blue-500 bg-[var(--color-panel-2)]"
@@ -56,9 +45,9 @@ function Row({
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <span
-          className="cursor-grab text-[var(--color-muted)] opacity-0 group-hover:opacity-60"
+          onPointerDown={(e) => onGripDown(index, e)}
+          className="cursor-grab touch-none select-none px-0.5 text-[var(--color-muted)] opacity-30 hover:opacity-100"
           title="拖曳排序"
-          aria-hidden="true"
         >
           ⠿
         </span>
@@ -94,15 +83,41 @@ function Row({
 export default function Watchlist() {
   const watchlist = useStore((s) => s.watchlist);
   const reorder = useStore((s) => s.reorder);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [overIndex, setOverIndex] = useState<number | null>(null);
+  const dragIndex = useRef<number | null>(null);
+  const overIndex = useRef<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
 
-  const handleDrop = () => {
-    if (dragIndex != null && overIndex != null) {
-      reorder(dragIndex, overIndex);
-    }
-    setDragIndex(null);
-    setOverIndex(null);
+  // Pointer-based drag (native HTML5 DnD is unreliable in WKWebView when
+  // user-select is disabled globally).
+  const onGripDown = (index: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragIndex.current = index;
+    overIndex.current = index;
+    setOver(index);
+
+    const move = (ev: PointerEvent) => {
+      const el = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest(
+        "[data-row-index]",
+      ) as HTMLElement | null;
+      if (el) {
+        const i = Number(el.dataset.rowIndex);
+        overIndex.current = i;
+        setOver(i);
+      }
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (dragIndex.current != null && overIndex.current != null) {
+        reorder(dragIndex.current, overIndex.current);
+      }
+      dragIndex.current = null;
+      overIndex.current = null;
+      setOver(null);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   };
 
   return (
@@ -121,14 +136,8 @@ export default function Watchlist() {
               key={item.stock_id}
               item={item}
               index={index}
-              dragOver={overIndex === index && dragIndex !== index}
-              onDragStart={setDragIndex}
-              onDragEnter={setOverIndex}
-              onDrop={handleDrop}
-              onDragEnd={() => {
-                setDragIndex(null);
-                setOverIndex(null);
-              }}
+              over={over === index && dragIndex.current !== index}
+              onGripDown={onGripDown}
             />
           ))
         )}
