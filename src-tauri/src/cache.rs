@@ -53,6 +53,12 @@ pub fn init(conn: &Connection) -> Result<()> {
             factor   REAL NOT NULL,
             PRIMARY KEY (stock_id, date)
         );
+        CREATE TABLE IF NOT EXISTS dividends (
+            stock_id TEXT NOT NULL,
+            date     TEXT NOT NULL,
+            factor   REAL NOT NULL,
+            PRIMARY KEY (stock_id, date)
+        );
         CREATE TABLE IF NOT EXISTS meta (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -362,6 +368,36 @@ pub fn upsert_splits(conn: &mut Connection, stock_id: &str, splits: &[SplitEvent
 pub fn get_splits(conn: &Connection, stock_id: &str, since: &str) -> Result<Vec<SplitEvent>> {
     let mut stmt = conn.prepare(
         "SELECT date, factor FROM splits WHERE stock_id = ?1 AND date >= ?2 ORDER BY date ASC",
+    )?;
+    let rows = stmt.query_map(params![stock_id, since], |r| {
+        Ok(SplitEvent {
+            date: r.get(0)?,
+            factor: r.get(1)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+// ---- dividends (除權息 adjustment factors) ----
+
+pub fn upsert_dividends(conn: &mut Connection, stock_id: &str, events: &[SplitEvent]) -> Result<()> {
+    let tx = conn.transaction()?;
+    {
+        let mut stmt = tx.prepare(
+            "INSERT INTO dividends(stock_id, date, factor) VALUES(?1, ?2, ?3)
+             ON CONFLICT(stock_id, date) DO UPDATE SET factor = excluded.factor",
+        )?;
+        for e in events {
+            stmt.execute(params![stock_id, e.date, e.factor])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn get_dividends(conn: &Connection, stock_id: &str, since: &str) -> Result<Vec<SplitEvent>> {
+    let mut stmt = conn.prepare(
+        "SELECT date, factor FROM dividends WHERE stock_id = ?1 AND date >= ?2 ORDER BY date ASC",
     )?;
     let rows = stmt.query_map(params![stock_id, since], |r| {
         Ok(SplitEvent {

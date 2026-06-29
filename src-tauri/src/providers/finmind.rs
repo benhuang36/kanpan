@@ -186,6 +186,31 @@ impl FinMind {
         Ok(out)
     }
 
+    /// Ex-dividend (除權息) events as multiplicative adjustment factors
+    /// (after / before reference price), from `start_date`, ascending.
+    pub async fn dividends(&self, stock_id: &str, start_date: &str) -> Result<Vec<SplitEvent>> {
+        let rows = self
+            .fetch("TaiwanStockDividendResult", Some(stock_id), Some(start_date))
+            .await?;
+        let mut out: Vec<SplitEvent> = rows
+            .iter()
+            .filter_map(|r| {
+                let date = str_field(r, "date");
+                let before = num_field(r, "before_price");
+                let after = num_field(r, "after_price");
+                if date.is_empty() || before <= 0.0 || after <= 0.0 {
+                    return None;
+                }
+                Some(SplitEvent {
+                    date,
+                    factor: after / before,
+                })
+            })
+            .collect();
+        out.sort_by(|a, b| a.date.cmp(&b.date));
+        Ok(out)
+    }
+
     /// Valuation series (PER / PBR / 殖利率) from `start_date`, ascending.
     pub async fn per_pbr(&self, stock_id: &str, start_date: &str) -> Result<Vec<Valuation>> {
         let rows = self

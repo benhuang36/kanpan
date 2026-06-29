@@ -182,16 +182,17 @@ fn day_pct(db: &Arc<Mutex<Connection>>, quotes: &QuoteMap, id: &str) -> Option<f
 }
 
 fn last_rsi(db: &Arc<Mutex<Connection>>, id: &str) -> Option<f64> {
-    let (mut candles, splits) = {
+    let (mut candles, adjustments) = {
         let conn = db.lock().ok()?;
         let candles = cache::get_prices(&conn, id, &lookback(400)).ok()?;
-        let splits = cache::get_splits(&conn, id, &lookback(400)).ok()?;
-        (candles, splits)
+        let mut adj = cache::get_splits(&conn, id, &lookback(400)).ok()?;
+        adj.extend(cache::get_dividends(&conn, id, &lookback(400)).ok()?);
+        (candles, adj)
     };
     if candles.len() < 15 {
         return None;
     }
-    apply_splits(&mut candles, &splits);
+    apply_splits(&mut candles, &adjustments);
     let closes: Vec<f64> = candles.iter().map(|c| c.close).collect();
     rsi(&closes, 14).iter().rev().flatten().next().copied()
 }

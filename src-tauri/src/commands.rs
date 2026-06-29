@@ -210,9 +210,24 @@ pub async fn get_stock_detail(
         }
     }
 
+    // --- dividends (除權息, for back-adjusting the chart/indicators) ---
+    let div_key = format!("div_fetched:{stock_id}");
+    let need_div = {
+        let conn = state.db.lock().unwrap();
+        !fresh(&conn, &div_key, HISTORY_TTL_SECS)
+    };
+    if need_div {
+        if let Ok(divs) = state.finmind.dividends(&stock_id, &price_start).await {
+            let mut conn = state.db.lock().unwrap();
+            cache::upsert_dividends(&mut conn, &stock_id, &divs)?;
+            cache::meta_set(&conn, &div_key, &now_unix().to_string())?;
+        }
+    }
+
     let conn = state.db.lock().unwrap();
     let mut candles = cache::get_prices(&conn, &stock_id, &price_start)?;
-    let splits = cache::get_splits(&conn, &stock_id, &price_start)?;
+    let mut adjustments = cache::get_splits(&conn, &stock_id, &price_start)?;
+    adjustments.extend(cache::get_dividends(&conn, &stock_id, &price_start)?);
     let institutional = cache::get_institutional(&conn, &stock_id, &inst_start)?;
     let valuation = cache::latest_per(&conn, &stock_id)?;
     let margin = cache::get_margin(&conn, &stock_id, &inst_start)?;
@@ -221,8 +236,8 @@ pub async fn get_stock_detail(
     if candles.is_empty() {
         return Err(AppError::msg(format!("查無 {stock_id} 的歷史資料")));
     }
-    // Back-adjust historical bars for splits so the series is continuous.
-    apply_splits(&mut candles, &splits);
+    // Back-adjust historical bars for splits + dividends so the series is continuous.
+    apply_splits(&mut candles, &adjustments);
     let ma = build_ma(&candles);
     let indicators = build_indicators(&candles);
     let summary = build_summary(&info, &candles, &ma)
