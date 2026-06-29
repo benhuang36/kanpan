@@ -244,9 +244,11 @@ export default function Settings({ onClose }: { onClose: () => void }) {
           </label>
         </Section>
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm hover:bg-[var(--color-panel-2)]">關閉</button>
-          <button onClick={save} className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium hover:bg-blue-500">儲存金鑰</button>
+        <p className="mt-4 text-[11px] text-[var(--color-muted)]">
+          外觀、圖表、系統等偏好即時生效；API 金鑰於按「完成」時儲存。
+        </p>
+        <div className="mt-2 flex justify-end">
+          <button onClick={save} className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium hover:bg-blue-500">完成</button>
         </div>
       </div>
     </div>
