@@ -179,6 +179,13 @@ impl Channel {
             Channel::Books => "books",
         }
     }
+    fn from_name(s: &str) -> Option<Channel> {
+        match s {
+            "trades" => Some(Channel::Trades),
+            "books" => Some(Channel::Books),
+            _ => None,
+        }
+    }
 }
 
 /// Free-tier subscription cap (5 subscriptions on 1 connection).
@@ -260,12 +267,44 @@ fn sub_msg(symbol: &str, channel: Channel) -> Message {
     )
 }
 
-fn unsub_msg(symbol: &str, channel: Channel) -> Message {
-    Message::Text(
-        json!({ "event": "unsubscribe", "data": { "channel": channel.name(), "symbol": symbol } })
-            .to_string()
-            .into(),
-    )
+/// Fugle requires the subscription `id` (from the `subscribed` event) to
+/// unsubscribe — channel+symbol is rejected with "id should not be empty".
+fn unsub_by_id(id: &str) -> Message {
+    Message::Text(json!({ "event": "unsubscribe", "data": { "id": id } }).to_string().into())
+}
+
+type SubKey = (String, Channel);
+
+/// Subscribe what we want but don't have, unsubscribe (by id) what we no longer
+/// want. Idempotent; safe to call repeatedly.
+async fn reconcile<W>(
+    write: &mut W,
+    desired: &HashSet<SubKey>,
+    subscribed: &mut HashMap<SubKey, String>,
+    pending: &mut HashSet<SubKey>,
+) where
+    W: futures_util::Sink<Message> + Unpin,
+{
+    let drop: Vec<(SubKey, String)> = subscribed
+        .iter()
+        .filter(|(k, _)| !desired.contains(*k))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    for (k, id) in drop {
+        eprintln!("[fugle] unsubscribe {} {}", k.0, k.1.name());
+        let _ = write.send(unsub_by_id(&id)).await;
+        subscribed.remove(&k);
+    }
+    let add: Vec<SubKey> = desired
+        .iter()
+        .filter(|k| !subscribed.contains_key(*k) && !pending.contains(*k))
+        .cloned()
+        .collect();
+    for (sym, ch) in add {
+        eprintln!("[fugle] subscribe {sym} {}", ch.name());
+        let _ = write.send(sub_msg(&sym, ch)).await;
+        pending.insert((sym, ch));
+    }
 }
 
 fn levels(v: &Value, key: &str) -> Vec<BookLevel> {
@@ -286,7 +325,9 @@ fn levels(v: &Value, key: &str) -> Vec<BookLevel> {
 /// per-symbol accumulators; reconnects with a fixed backoff.
 async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMap) {
     let mut key: Option<String> = None;
-    let mut targets: HashSet<(String, Channel)> = HashSet::new();
+    let mut desired: HashSet<SubKey> = HashSet::new();
+    let mut subscribed: HashMap<SubKey, String> = HashMap::new();
+    let mut pending: HashSet<SubKey> = HashSet::new();
     let mut state: HashMap<String, SymState> = HashMap::new();
 
     loop {
@@ -296,7 +337,7 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
                 None => return,
                 Some(Command::SetKey(k)) => key = Some(k),
                 Some(Command::SetTargets(t)) => {
-                    targets = t.into_iter().collect();
+                    desired = t.into_iter().collect();
                 }
             }
             continue;
@@ -315,6 +356,9 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
             continue;
         }
         let mut authed = false;
+        // A new connection invalidates all subscription ids.
+        subscribed.clear();
+        pending.clear();
 
         // Inner loop: pump socket messages and control commands until the
         // connection drops or the key changes (which forces a reconnect).
@@ -324,18 +368,10 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
                     None => return,
                     Some(Command::SetKey(k)) => { key = Some(k); break true; }
                     Some(Command::SetTargets(t)) => {
-                        let new_set: HashSet<(String, Channel)> = t.into_iter().collect();
+                        desired = t.into_iter().collect();
                         if authed {
-                            for (sym, ch) in targets.difference(&new_set) {
-                                eprintln!("[fugle] unsubscribe {sym} {}", ch.name());
-                                let _ = write.send(unsub_msg(sym, *ch)).await;
-                            }
-                            for (sym, ch) in new_set.difference(&targets) {
-                                eprintln!("[fugle] subscribe {sym} {}", ch.name());
-                                let _ = write.send(sub_msg(sym, *ch)).await;
-                            }
+                            reconcile(&mut write, &desired, &mut subscribed, &mut pending).await;
                         }
-                        targets = new_set;
                     }
                 },
                 msg = read.next() => match msg {
@@ -350,9 +386,7 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
                         match event {
                             "authenticated" => {
                                 authed = true;
-                                for (sym, ch) in targets.iter() {
-                                    let _ = write.send(sub_msg(sym, *ch)).await;
-                                }
+                                reconcile(&mut write, &desired, &mut subscribed, &mut pending).await;
                             }
                             "data" => {
                                 if let Some(quote) = apply_data(&parsed, &mut state) {
@@ -362,10 +396,29 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
                                     let _ = app.emit(QUOTE_EVENT, &quote);
                                 }
                             }
-                            "subscribed" | "unsubscribed" | "error" => {
-                                eprintln!("[fugle] {event}: {}", parsed.get("data").map(|d| d.to_string()).unwrap_or_default());
+                            "subscribed" => {
+                                let data = parsed.get("data");
+                                let sym = data.and_then(|d| d.get("symbol")).and_then(|s| s.as_str());
+                                let ch = data
+                                    .and_then(|d| d.get("channel"))
+                                    .and_then(|c| c.as_str())
+                                    .and_then(Channel::from_name);
+                                let id = data.and_then(|d| d.get("id")).and_then(|i| i.as_str());
+                                if let (Some(sym), Some(ch), Some(id)) = (sym, ch, id) {
+                                    let k = (sym.to_string(), ch);
+                                    pending.remove(&k);
+                                    if desired.contains(&k) {
+                                        subscribed.insert(k, id.to_string());
+                                    } else {
+                                        // No longer wanted: unsubscribe now that we have the id.
+                                        let _ = write.send(unsub_by_id(id)).await;
+                                    }
+                                }
                             }
-                            _ => {} // heartbeat
+                            "error" => {
+                                eprintln!("[fugle] error: {}", parsed.get("data").map(|d| d.to_string()).unwrap_or_default());
+                            }
+                            _ => {} // unsubscribed / heartbeat
                         }
                     }
                     _ => {}
