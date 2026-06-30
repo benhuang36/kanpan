@@ -40,7 +40,12 @@ export default function StockDetail({ stockId }: { stockId: string }) {
       <PriceHeader s={data.summary} rt={rt} />
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
-          <ChartPanel stockId={stockId} candles={data.candles} ma={data.ma} />
+          <ChartPanel
+            stockId={stockId}
+            candles={data.candles}
+            ma={data.ma}
+            refClose={data.summary.ref_close}
+          />
         </div>
         <div className="w-48 shrink-0 overflow-auto border-l border-[var(--color-border)]">
           <OrderBook quote={rt} />

@@ -33,10 +33,12 @@ export default function TrendChart({
   stockId,
   dailyCandles,
   range,
+  refClose,
 }: {
   stockId: string;
   dailyCandles: Candle[];
   range: TrendRange;
+  refClose?: number;
 }) {
   const theme = useStore((s) => s.theme);
   const colorUp = useStore((s) => s.colorUp);
@@ -76,7 +78,9 @@ export default function TrendChart({
     const el = containerRef.current;
     if (!el || points.length === 0) return;
     const col = chartColors(theme, colorUp);
-    const up = points[points.length - 1].value >= points[0].value;
+    // 當天以昨收為基準(漲跌)；其他範圍以區間起點為基準。
+    const baseline = range === "today" && refClose ? refClose : points[0].value;
+    const up = points[points.length - 1].value >= baseline;
     const lineColor = up ? col.up : col.down;
 
     const chart: IChartApi = createChart(el, {
@@ -119,7 +123,7 @@ export default function TrendChart({
     });
 
     return () => chart.remove();
-  }, [points, theme, colorUp, range]);
+  }, [points, theme, colorUp, range, refClose]);
 
   if (range === "today" && !fugleKey) {
     return <Center>需 Fugle 金鑰才能看當日走勢</Center>;

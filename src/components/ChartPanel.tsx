@@ -30,10 +30,12 @@ export default function ChartPanel({
   stockId,
   candles,
   ma,
+  refClose,
 }: {
   stockId: string;
   candles: Candle[];
   ma: MaSeries[];
+  refClose?: number;
 }) {
   const [mode, setMode] = useState<"kline" | "trend">("kline");
   const [tf, setTf] = useState<TF>(useStore.getState().defaultTimeframe);
@@ -95,7 +97,7 @@ export default function ChartPanel({
 
       <div className="min-h-0 flex-1">
         {mode === "trend" ? (
-          <TrendChart stockId={stockId} dailyCandles={candles} range={range} />
+          <TrendChart stockId={stockId} dailyCandles={candles} range={range} refClose={refClose} />
         ) : !intraday ? (
           <PriceChart candles={candles} ma={ma} />
         ) : !fugleKey ? (
