@@ -4,9 +4,11 @@ import {
   createChart,
   ColorType,
   CrosshairMode,
+  LineStyle,
   type IChartApi,
   type UTCTimestamp,
   type Time,
+  type AutoscaleInfo,
 } from "lightweight-charts";
 import { getCloseHistory, getIntradayCandles } from "../api";
 import { useStore } from "../store";
@@ -101,14 +103,41 @@ export default function TrendChart({
       },
       autoSize: true,
     });
+    const showRef = range === "today" && !!refClose;
     const series = chart.addAreaSeries({
       lineColor,
       topColor: lineColor + "33",
       bottomColor: lineColor + "08",
       lineWidth: 2,
       priceLineVisible: false,
+      // 確保昨收線一定落在可視範圍內(price line 預設不參與自動縮放)。
+      autoscaleInfoProvider: showRef
+        ? (orig: () => AutoscaleInfo | null) => {
+            const res = orig();
+            if (!res) return res;
+            const { minValue, maxValue } = res.priceRange;
+            return {
+              ...res,
+              priceRange: {
+                minValue: Math.min(minValue, refClose!),
+                maxValue: Math.max(maxValue, refClose!),
+              },
+            };
+          }
+        : undefined,
     });
     series.setData(points.map((p) => ({ time: p.time, value: p.value })));
+    // 當天:畫一條以昨收為基準的橫向虛線。
+    if (showRef) {
+      series.createPriceLine({
+        price: refClose,
+        color: col.text,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: "昨收",
+      });
+    }
     chart.timeScale().fitContent();
 
     const labelByTime = new Map(points.map((p, i) => [i, p]));
