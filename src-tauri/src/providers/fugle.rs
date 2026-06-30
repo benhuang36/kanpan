@@ -291,7 +291,6 @@ async fn reconcile<W>(
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     for (k, id) in drop {
-        eprintln!("[fugle] unsubscribe {} {}", k.0, k.1.name());
         let _ = write.send(unsub_by_id(&id)).await;
         subscribed.remove(&k);
     }
@@ -301,7 +300,6 @@ async fn reconcile<W>(
         .cloned()
         .collect();
     for (sym, ch) in add {
-        eprintln!("[fugle] subscribe {sym} {}", ch.name());
         let _ = write.send(sub_msg(&sym, ch)).await;
         pending.insert((sym, ch));
     }
@@ -415,10 +413,7 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
                                     }
                                 }
                             }
-                            "error" => {
-                                eprintln!("[fugle] error: {}", parsed.get("data").map(|d| d.to_string()).unwrap_or_default());
-                            }
-                            _ => {} // unsubscribed / heartbeat
+                            _ => {} // subscribed-elsewhere / unsubscribed / error / heartbeat
                         }
                     }
                     _ => {}

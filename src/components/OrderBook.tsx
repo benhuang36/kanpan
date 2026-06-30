@@ -1,5 +1,5 @@
 import type { RealtimeQuote } from "../types";
-import { fmtPrice, fmtVolumeLots } from "../format";
+import { fmtPrice, fmtLotsVolume } from "../format";
 import InfoTip from "./InfoTip";
 
 function Row({
@@ -24,7 +24,7 @@ function Row({
         style={{ width: `${pct}%` }}
       />
       <span className={`relative ${priceColor}`}>{fmtPrice(price)}</span>
-      <span className="relative text-[var(--color-muted)]">{Math.round(size / 1000)}</span>
+      <span className="relative text-[var(--color-muted)]">{Math.round(size)}</span>
     </div>
   );
 }
@@ -71,10 +71,10 @@ export default function OrderBook({ quote }: { quote: RealtimeQuote | undefined 
       <div className="mt-3 px-1">
         <div className="mb-1 flex items-center justify-between text-[11px]">
           <span className="text-[var(--color-up)]">
-            外盤 {fmtVolumeLots(outer)}
+            外盤 {fmtLotsVolume(outer)}
             <InfoTip term="order_book" />
           </span>
-          <span className="text-[var(--color-down)]">內盤 {fmtVolumeLots(inner)}</span>
+          <span className="text-[var(--color-down)]">內盤 {fmtLotsVolume(inner)}</span>
         </div>
         <div className="flex h-2 overflow-hidden rounded-full bg-[var(--color-down)]/30">
           <div className="bg-[var(--color-up)]" style={{ width: `${outerPct}%` }} />
