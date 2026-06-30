@@ -30,6 +30,11 @@ export interface IntradayCandle {
   volume: number;
 }
 
+export interface ClosePoint {
+  date: string;
+  close: number;
+}
+
 export interface InstitutionalDay {
   date: string;
   foreign_net: number;

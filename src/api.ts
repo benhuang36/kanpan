@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { IntradayCandle, StockDetail, SymbolInfo } from "./types";
+import type { ClosePoint, IntradayCandle, StockDetail, SymbolInfo } from "./types";
 import type { AlertRule } from "./store";
 
 export const searchSymbols = (query: string) =>
@@ -24,6 +24,9 @@ export const fugleSetPlan = (focus: string | null, watch: string[]) =>
 
 export const getIntradayCandles = (stockId: string, timeframe: string) =>
   invoke<IntradayCandle[]>("get_intraday_candles", { stockId, timeframe });
+
+export const getCloseHistory = (stockId: string, days: number) =>
+  invoke<ClosePoint[]>("get_close_history", { stockId, days });
 
 export const pushAlerts = (alerts: AlertRule[]) =>
   invoke<void>("set_alerts", { alerts });

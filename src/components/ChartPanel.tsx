@@ -4,6 +4,7 @@ import { getIntradayCandles } from "../api";
 import { useStore } from "../store";
 import PriceChart from "./PriceChart";
 import IntradayChart from "./IntradayChart";
+import TrendChart, { type TrendRange } from "./TrendChart";
 import type { Candle, MaSeries } from "../types";
 
 type TF = "D" | "1" | "5" | "15" | "60";
@@ -16,6 +17,15 @@ const TFS: { id: TF; label: string }[] = [
   { id: "60", label: "60分" },
 ];
 
+const RANGES: { id: TrendRange; label: string }[] = [
+  { id: "today", label: "當天" },
+  { id: "week", label: "當週" },
+  { id: "month", label: "當月" },
+  { id: "year", label: "當年" },
+  { id: "5y", label: "5年" },
+  { id: "10y", label: "10年" },
+];
+
 export default function ChartPanel({
   stockId,
   candles,
@@ -25,40 +35,68 @@ export default function ChartPanel({
   candles: Candle[];
   ma: MaSeries[];
 }) {
+  const [mode, setMode] = useState<"kline" | "trend">("kline");
   const [tf, setTf] = useState<TF>(useStore.getState().defaultTimeframe);
+  const [range, setRange] = useState<TrendRange>("year");
   const fugleKey = useStore((s) => s.fugleKey);
   const intraday = tf !== "D";
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["intraday", stockId, tf],
     queryFn: () => getIntradayCandles(stockId, tf),
-    enabled: intraday && !!fugleKey,
+    enabled: mode === "kline" && intraday && !!fugleKey,
     refetchInterval: intraday ? 30_000 : false, // 盤中自動更新
   });
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center gap-1 px-2 py-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-2 py-1">
         <div className="flex rounded-md border border-[var(--color-border)] p-0.5 text-xs">
-          {TFS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTf(t.id)}
-              className={`rounded px-2 py-0.5 ${
-                tf === t.id ? "bg-blue-600" : "hover:bg-[var(--color-panel-2)]"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          <button
+            onClick={() => setMode("kline")}
+            className={`rounded px-2 py-0.5 ${mode === "kline" ? "bg-blue-600" : "hover:bg-[var(--color-panel-2)]"}`}
+          >
+            K線
+          </button>
+          <button
+            onClick={() => setMode("trend")}
+            className={`rounded px-2 py-0.5 ${mode === "trend" ? "bg-blue-600" : "hover:bg-[var(--color-panel-2)]"}`}
+          >
+            走勢
+          </button>
         </div>
-        {intraday && (
-          <span className="text-[11px] text-[var(--color-muted)]">分K 由 Fugle 提供，盤中每 30 秒更新</span>
+
+        {mode === "kline" ? (
+          <div className="flex rounded-md border border-[var(--color-border)] p-0.5 text-xs">
+            {TFS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTf(t.id)}
+                className={`rounded px-2 py-0.5 ${tf === t.id ? "bg-blue-600" : "hover:bg-[var(--color-panel-2)]"}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex rounded-md border border-[var(--color-border)] p-0.5 text-xs">
+            {RANGES.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => setRange(r.id)}
+                className={`rounded px-2 py-0.5 ${range === r.id ? "bg-blue-600" : "hover:bg-[var(--color-panel-2)]"}`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
       <div className="min-h-0 flex-1">
-        {!intraday ? (
+        {mode === "trend" ? (
+          <TrendChart stockId={stockId} dailyCandles={candles} range={range} />
+        ) : !intraday ? (
           <PriceChart candles={candles} ma={ma} />
         ) : !fugleKey ? (
           <Center>需先在「設定」輸入 Fugle 金鑰才能看分K</Center>

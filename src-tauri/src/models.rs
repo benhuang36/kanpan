@@ -53,6 +53,13 @@ pub struct Candle {
     pub volume: f64,
 }
 
+/// A single daily close point for the trend (line) chart.
+#[derive(Debug, Clone, Serialize)]
+pub struct ClosePoint {
+    pub date: String,
+    pub close: f64,
+}
+
 /// One intraday minute bar. `time` is epoch **seconds** (UTC).
 #[derive(Debug, Clone, Serialize)]
 pub struct IntradayCandle {

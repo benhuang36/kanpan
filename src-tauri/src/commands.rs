@@ -3,7 +3,7 @@ use crate::error::{AppError, Result};
 use crate::indicators::{apply_splits, build_indicators, build_ma, build_summary};
 use crate::models::{StockDetail, SymbolInfo};
 use crate::alerts::AlertState;
-use crate::models::{AlertRule, IntradayCandle};
+use crate::models::{AlertRule, ClosePoint, IntradayCandle};
 use crate::providers::finmind::FinMind;
 use crate::providers::fugle::{FugleHttp, FugleManager};
 use chrono::{Duration, Local};
@@ -280,6 +280,52 @@ pub async fn get_intraday_candles(
     timeframe: String,
 ) -> Result<Vec<IntradayCandle>> {
     state.fugle_http.intraday_candles(&stock_id, &timeframe).await
+}
+
+/// Split/dividend-adjusted daily close series back to `days` ago (for the trend
+/// chart's longer ranges, e.g. 5/10 years). Fetches+caches long history on demand.
+#[tauri::command]
+pub async fn get_close_history(
+    state: State<'_, AppState>,
+    stock_id: String,
+    days: i64,
+) -> Result<Vec<ClosePoint>> {
+    let today = Local::now().date_naive();
+    let start = (today - Duration::days(days)).format("%Y-%m-%d").to_string();
+
+    let need = {
+        let conn = state.db.lock().unwrap();
+        match cache::min_price_date(&conn, &stock_id)? {
+            Some(min) => min > start,
+            None => true,
+        }
+    };
+    if need {
+        if let Ok(candles) = state.finmind.daily_price(&stock_id, &start).await {
+            let mut conn = state.db.lock().unwrap();
+            cache::upsert_prices(&mut conn, &stock_id, &candles)?;
+        }
+        if let Ok(sp) = state.finmind.splits(&stock_id, &start).await {
+            let mut conn = state.db.lock().unwrap();
+            cache::upsert_splits(&mut conn, &stock_id, &sp)?;
+        }
+        if let Ok(dv) = state.finmind.dividends(&stock_id, &start).await {
+            let mut conn = state.db.lock().unwrap();
+            cache::upsert_dividends(&mut conn, &stock_id, &dv)?;
+        }
+    }
+
+    let conn = state.db.lock().unwrap();
+    let mut candles = cache::get_prices(&conn, &stock_id, &start)?;
+    let mut adj = cache::get_splits(&conn, &stock_id, &start)?;
+    adj.extend(cache::get_dividends(&conn, &stock_id, &start)?);
+    drop(conn);
+
+    apply_splits(&mut candles, &adj);
+    Ok(candles
+        .into_iter()
+        .map(|c| ClosePoint { date: c.date, close: c.close })
+        .collect())
 }
 
 #[derive(serde::Deserialize)]

@@ -170,6 +170,15 @@ pub fn max_price_date(conn: &Connection, stock_id: &str) -> Result<Option<String
     Ok(v)
 }
 
+pub fn min_price_date(conn: &Connection, stock_id: &str) -> Result<Option<String>> {
+    let v: Option<String> = conn.query_row(
+        "SELECT MIN(date) FROM prices WHERE stock_id = ?1",
+        [stock_id],
+        |r| r.get(0),
+    )?;
+    Ok(v)
+}
+
 pub fn upsert_prices(conn: &mut Connection, stock_id: &str, candles: &[Candle]) -> Result<()> {
     let tx = conn.transaction()?;
     {

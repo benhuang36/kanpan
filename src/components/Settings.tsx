@@ -19,7 +19,8 @@ import {
   googleStatus,
   googleSignOut,
 } from "../api";
-import { checkForUpdate } from "../update";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { checkForUpdate, RELEASES_URL } from "../update";
 import { syncNow } from "../sync";
 
 type TestState = { state: "idle" | "testing" | "ok" | "err"; msg: string };
@@ -68,6 +69,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
   const [fugleT, setFugleT] = useState<TestState>(IDLE);
   const [aiT, setAiT] = useState<TestState>(IDLE);
   const [updateMsg, setUpdateMsg] = useState("");
+  const [updateVer, setUpdateVer] = useState<string | null>(null);
   const [autostartOn, setAutostartOn] = useState(false);
   const initialAutostart = useRef<boolean | null>(null);
 
@@ -142,6 +144,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
   const checkUpdate = async () => {
     setUpdateMsg("檢查中…");
     const v = await checkForUpdate();
+    setUpdateVer(v);
     setUpdateMsg(v ? `有新版本 v${v}` : "已是最新版本");
   };
 
@@ -355,6 +358,9 @@ export default function Settings({ onClose }: { onClose: () => void }) {
           <div className="mt-2 flex items-center gap-3">
             <button onClick={checkUpdate} className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-panel-2)]">立即檢查更新</button>
             {updateMsg && <span className="text-xs text-[var(--color-muted)]">{updateMsg}</span>}
+            {updateVer && (
+              <button onClick={() => openUrl(RELEASES_URL).catch(() => {})} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium hover:bg-blue-500">前往下載</button>
+            )}
           </div>
           <label className="mt-3 flex items-center gap-2 text-sm">
             自動更新間隔（分鐘，0=關）

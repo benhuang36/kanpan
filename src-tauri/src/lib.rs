@@ -120,6 +120,7 @@ pub fn run() {
             commands::fugle_key_set,
             commands::fugle_set_plan,
             commands::get_intraday_candles,
+            commands::get_close_history,
             commands::ai_chat,
             commands::set_alerts,
             commands::set_poll_minutes,
