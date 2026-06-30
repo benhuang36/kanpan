@@ -327,9 +327,11 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
                         let new_set: HashSet<(String, Channel)> = t.into_iter().collect();
                         if authed {
                             for (sym, ch) in targets.difference(&new_set) {
+                                eprintln!("[fugle] unsubscribe {sym} {}", ch.name());
                                 let _ = write.send(unsub_msg(sym, *ch)).await;
                             }
                             for (sym, ch) in new_set.difference(&targets) {
+                                eprintln!("[fugle] subscribe {sym} {}", ch.name());
                                 let _ = write.send(sub_msg(sym, *ch)).await;
                             }
                         }
@@ -360,7 +362,10 @@ async fn run(app: AppHandle, mut rx: UnboundedReceiver<Command>, latest: QuoteMa
                                     let _ = app.emit(QUOTE_EVENT, &quote);
                                 }
                             }
-                            _ => {} // subscribed / heartbeat / error
+                            "subscribed" | "unsubscribed" | "error" => {
+                                eprintln!("[fugle] {event}: {}", parsed.get("data").map(|d| d.to_string()).unwrap_or_default());
+                            }
+                            _ => {} // heartbeat
                         }
                     }
                     _ => {}
